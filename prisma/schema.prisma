@@ -1,0 +1,117 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+/*** ENUMS ***/
+enum Role {
+  USER
+  RECRUITER
+}
+
+/*** MODELS ***/
+
+model User {
+  id          String       @id @default(uuid())
+  email       String       @unique
+  password    String?      // optional if login via Supabase OAuth
+  name        String?
+  avatar      String?
+  headline    String?
+  linkedinId  String?      @map("linkedin_id")
+  skills      String[]     @default([])  // skills extracted from LinkedIn API
+  bio         String?
+  role        Role         @default(USER)
+  createdAt   DateTime     @default(now())   @map("created_at")
+  updatedAt   DateTime     @updatedAt        @map("updated_at")
+
+  postedJobs  Job[]        @relation("posted_by_recruiter")
+  matchScores MatchScore[]
+
+  @@map("users")
+}
+
+model Company {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  website   String?
+  logoUrl   String?  @map("logo_url")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  jobs      Job[]
+
+  @@map("companies")
+}
+
+model Job {
+  id                String      @id @default(uuid())
+  source            String                      // "indeed", "linkedin", "jobstreet"
+  sourceId          String?     @map("source_id") // original API job ID
+  title             String
+  companyName       String?     @map("company")
+  companyId         String?     @map("company_id")
+  description       String?
+  requirements      String?
+  city              String?
+  country           String?
+  fullAddress       String?     @map("full_address")
+  externalUrl       String?     @map("external_url")
+  datePosted        DateTime?   @map("date_posted")
+  dateCreated       DateTime?   @map("date_created")
+  category          String?
+  skills            String[]    @default([])     // AI-extracted skills
+  isIntegratedJob   Boolean     @default(false)  @map("is_integrated_job")
+
+  // posted manually by recruiter (optional)
+  posterId          String?     @map("poster_id")
+  poster            User?       @relation("posted_by_recruiter", fields: [posterId], references: [id])
+
+  company           Company?    @relation(fields: [companyId], references: [id])
+  createdAt         DateTime    @default(now())  @map("created_at")
+
+  matchScores       MatchScore[]
+
+  @@map("jobs")
+
+  // Prevent duplicate API imports
+  @@unique([source, sourceId], map: "jobs_source_sourceId_unique")
+
+  // Index for faster filtering
+  @@index([category], map: "jobs_category_idx")
+  @@index([city], map: "jobs_city_idx")
+  @@index([country], map: "jobs_country_idx")
+}
+
+model MatchScore {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  jobId     String   @map("job_id")
+  score     Float
+  reason    String?  // explanation from Gemini ("why this job matches you")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user      User     @relation(fields: [userId], references: [id])
+  job       Job      @relation(fields: [jobId], references: [id])
+
+  @@map("match_scores")
+  @@unique([userId, jobId], map: "match_scores_user_job_unique")
+}
+
+model JobImportLog {
+  id            String   @id @default(uuid())
+  provider      String   @map("provider")  // "indeed", "jobstreet", "linkedin"
+  providerJobId String?  @map("provider_job_id")
+  externalUrl   String?  @map("external_url")
+  rawPayload    Json?    @map("raw_payload") // original API JSON
+  status        String?                      // imported, skipped, error
+  message       String?
+  importedAt    DateTime @default(now()) @map("imported_at")
+
+  @@map("job_import_logs")
+  @@index([provider, providerJobId], map: "job_import_logs_provider_idx")
+}
