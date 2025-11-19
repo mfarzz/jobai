@@ -1,3 +1,6 @@
+"use client";
+
+import { useRouter } from 'next/navigation';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -11,10 +14,10 @@ interface Job {
   companyLogo: string;
   location: string;
   description: string;
-  matchScore: number;
   type: string;
   posted: string;
   salary: string;
+  url?: string;
 }
 
 interface JobCardProps {
@@ -22,10 +25,12 @@ interface JobCardProps {
 }
 
 export function JobCard({ job }: JobCardProps) {
-  const getMatchColor = (score: number) => {
-    if (score >= 85) return 'bg-green-100 text-green-700';
-    if (score >= 75) return 'bg-blue-100 text-blue-700';
-    return 'bg-slate-100 text-slate-700';
+  const router = useRouter();
+
+  const handleViewDetails = () => {
+    if (job.url) {
+      router.push(job.url);
+    }
   };
 
   return (
@@ -41,7 +46,12 @@ export function JobCard({ job }: JobCardProps) {
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-4 mb-2">
             <div>
-              <h3 className="hover:text-blue-600 cursor-pointer mb-1">{job.title}</h3>
+              <h3 
+                className="hover:text-blue-600 cursor-pointer mb-1"
+                onClick={handleViewDetails}
+              >
+                {job.title}
+              </h3>
               <p className="text-slate-600">{job.company}</p>
             </div>
             <Button variant="ghost" size="icon" className="shrink-0">
@@ -69,17 +79,21 @@ export function JobCard({ job }: JobCardProps) {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Badge variant="secondary">{job.type}</Badge>
-              <Badge className={getMatchColor(job.matchScore)}>
-                <Sparkles className="w-3 h-3 mr-1" />
-                {job.matchScore}% Match
-              </Badge>
             </div>
 
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm">
+              <Button variant="outline" size="sm" onClick={handleViewDetails}>
                 View Details
               </Button>
-              <Button size="sm" className="gap-1">
+              <Button 
+                size="sm" 
+                className="gap-1"
+                onClick={() => {
+                  if (job.url && job.url !== '#') {
+                    router.push(job.url);
+                  }
+                }}
+              >
                 <Send className="w-4 h-4" />
                 Apply Now
               </Button>

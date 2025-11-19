@@ -8,110 +8,410 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
-/*** ENUMS ***/
-enum Role {
-  USER
-  RECRUITER
-}
-
-/*** MODELS ***/
+////////////////////////////////////////////////////
+// USERS
+////////////////////////////////////////////////////
 
 model User {
-  id          String       @id @default(uuid())
-  email       String       @unique
-  password    String?      // optional if login via Supabase OAuth
-  name        String?
-  avatar      String?
-  headline    String?
-  linkedinId  String?      @map("linkedin_id")
-  skills      String[]     @default([])  // skills extracted from LinkedIn API
-  bio         String?
-  role        Role         @default(USER)
-  createdAt   DateTime     @default(now())   @map("created_at")
-  updatedAt   DateTime     @updatedAt        @map("updated_at")
+  id            String    @id @default(uuid()) @db.Uuid
+  name          String?   @db.VarChar(150)
+  email         String    @unique @db.VarChar(150)
+  emailVerified DateTime? @map("email_verified") @db.Timestamp
+  password      String?   @db.Text // optional if login via OAuth
+  avatar        String?   @db.VarChar(200)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamp
 
-  postedJobs  Job[]        @relation("posted_by_recruiter")
-  matchScores MatchScore[]
+  accounts          Account[]
+  sessions          Session[]
+  userSkills        UserSkill[]
+  experiences       UserExperience[]
+  projects          UserProject[]
+  educations        UserEducation[]
+  certifications    UserCertification[]
+  careerAnalyses    CareerAnalysis[]
+  userQuests        UserQuest[]
+  roadmaps          Roadmap[]
+  arenaParticipants ArenaParticipant[]
+  userBadges        UserBadge[]
 
   @@map("users")
 }
 
-model Company {
-  id        String   @id @default(uuid())
-  name      String   @unique
-  website   String?
-  logoUrl   String?  @map("logo_url")
-  createdAt DateTime @default(now()) @map("created_at")
+////////////////////////////////////////////////////
+// NEXT-AUTH TABLES (OAuth & Session Management)
+////////////////////////////////////////////////////
 
-  jobs      Job[]
+model Account {
+  id                String  @id @default(uuid()) @db.Uuid
+  userId            String  @map("user_id") @db.Uuid
+  type              String
+  provider          String
+  providerAccountId String  @map("provider_account_id")
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(uuid()) @db.Uuid
+  sessionToken String   @unique @map("session_token")
+  userId       String   @map("user_id") @db.Uuid
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+////////////////////////////////////////////////////
+// COMPANIES (Detailed)
+////////////////////////////////////////////////////
+
+model Company {
+  id                    Int       @id @default(autoincrement())
+  kalibrrCompanyId      Int?      @map("kalibrr_company_id")
+  name                  String    @db.VarChar(200)
+  industry              String?   @db.VarChar(150)
+  description           String?   @db.Text
+  website               String?   @db.VarChar(200)
+  logo                  String?   @db.VarChar(300)
+  logoSmall             String?   @map("logo_small") @db.VarChar(300)
+  logoMedium            String?   @map("logo_medium") @db.VarChar(300)
+  recruiterLastActive   DateTime? @map("recruiter_last_active") @db.Timestamp
+  industryExperience    String?   @map("industry_experience") @db.VarChar(200)
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamp
+
+  jobs Job[]
 
   @@map("companies")
 }
 
+////////////////////////////////////////////////////
+// JOBS (Detailed Job Info from job detail API)
+////////////////////////////////////////////////////
+
 model Job {
-  id                String      @id @default(uuid())
-  source            String                      // "indeed", "linkedin", "jobstreet"
-  sourceId          String?     @map("source_id") // original API job ID
-  title             String
-  companyName       String?     @map("company")
-  companyId         String?     @map("company_id")
-  description       String?
-  requirements      String?
-  city              String?
-  country           String?
-  fullAddress       String?     @map("full_address")
-  externalUrl       String?     @map("external_url")
-  datePosted        DateTime?   @map("date_posted")
-  dateCreated       DateTime?   @map("date_created")
-  category          String?
-  skills            String[]    @default([])     // AI-extracted skills
-  isIntegratedJob   Boolean     @default(false)  @map("is_integrated_job")
+  id                    Int       @id @default(autoincrement())
+  kalibrrJobId          Int?      @unique @map("kalibrr_job_id")
 
-  // posted manually by recruiter (optional)
-  posterId          String?     @map("poster_id")
-  poster            User?       @relation("posted_by_recruiter", fields: [posterId], references: [id])
+  // Basic job info
+  title                 String    @db.VarChar(200)
+  function              String?   @db.VarChar(150)
+  category              String?   @db.VarChar(150)
+  type                  String?   @db.VarChar(80)
+  tenure                String?   @db.VarChar(100)
 
-  company           Company?    @relation(fields: [companyId], references: [id])
-  createdAt         DateTime    @default(now())  @map("created_at")
+  // Company info
+  companyId             Int?      @map("company_id")
+  companyName           String?   @map("company_name") @db.VarChar(200)
+  companyLogo           String?   @map("company_logo") @db.VarChar(300)
+  industry              String?   @db.VarChar(150)
 
-  matchScores       MatchScore[]
+  // Location
+  location              String?   @db.VarChar(300)
+  latitude              Decimal?  @db.Decimal
+  longitude             Decimal?  @db.Decimal
+
+  // Dates
+  activationDate        DateTime? @map("activation_date") @db.Timestamp
+  applicationEndDate    DateTime? @map("application_end_date") @db.Timestamp
+
+  // Work type
+  isHybrid              Boolean?  @default(false) @map("is_hybrid")
+  isWfh                 Boolean?  @default(false) @map("is_wfh")
+  isOpenFreshGrads      Boolean?  @default(false) @map("is_open_fresh_grads")
+  numberOfOpenings      Int?     @map("number_of_openings")
+
+  // Description fields
+  descriptionHtml       String?   @map("description_html") @db.Text
+  qualificationsHtml    String?   @map("qualifications_html") @db.Text
+  jobDescriptionRaw     String?   @map("job_description_raw") @db.Text
+  shortDescription      String?   @map("short_description") @db.Text
+
+  // Experience
+  minExperienceMonth    Int?      @map("min_experience_month")
+  openFreshGrad         Boolean?  @default(false) @map("open_fresh_grad")
+
+  // Other fields
+  slug                  String?   @db.VarChar(200)
+  visibility            String?   @db.VarChar(50)
+
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamp
+
+  company               Company?  @relation(fields: [companyId], references: [id])
+  jobSkills             JobSkill[]
+  careerAnalyses        CareerAnalysis[]
+  quests                Quest[]
+  roadmaps              Roadmap[]
 
   @@map("jobs")
-
-  // Prevent duplicate API imports
-  @@unique([source, sourceId], map: "jobs_source_sourceId_unique")
-
-  // Index for faster filtering
-  @@index([category], map: "jobs_category_idx")
-  @@index([city], map: "jobs_city_idx")
-  @@index([country], map: "jobs_country_idx")
 }
 
-model MatchScore {
-  id        String   @id @default(uuid())
-  userId    String   @map("user_id")
-  jobId     String   @map("job_id")
-  score     Float
-  reason    String?  // explanation from Gemini ("why this job matches you")
-  createdAt DateTime @default(now()) @map("created_at")
+////////////////////////////////////////////////////
+// JOB SKILLS (Extracted)
+////////////////////////////////////////////////////
 
-  user      User     @relation(fields: [userId], references: [id])
-  job       Job      @relation(fields: [jobId], references: [id])
+model JobSkill {
+  id        Int    @id @default(autoincrement())
+  jobId     Int    @map("job_id")
+  skillName String @map("skill_name") @db.VarChar(150)
+  skillType String? @map("skill_type") @db.VarChar(50) // hard / soft
 
-  @@map("match_scores")
-  @@unique([userId, jobId], map: "match_scores_user_job_unique")
+  job Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@map("job_skills")
 }
 
-model JobImportLog {
-  id            String   @id @default(uuid())
-  provider      String   @map("provider")  // "indeed", "jobstreet", "linkedin"
-  providerJobId String?  @map("provider_job_id")
-  externalUrl   String?  @map("external_url")
-  rawPayload    Json?    @map("raw_payload") // original API JSON
-  status        String?                      // imported, skipped, error
-  message       String?
-  importedAt    DateTime @default(now()) @map("imported_at")
+////////////////////////////////////////////////////
+// USER SKILLS (Profile)
+////////////////////////////////////////////////////
 
-  @@map("job_import_logs")
-  @@index([provider, providerJobId], map: "job_import_logs_provider_idx")
+model UserSkill {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  skillName String   @map("skill_name") @db.VarChar(150)
+  level     Int?
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamp
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_skills")
+}
+
+////////////////////////////////////////////////////
+// USER PROFILE DETAILS
+////////////////////////////////////////////////////
+
+model UserExperience {
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  title       String    @db.VarChar(200)
+  company     String    @db.VarChar(200)
+  location    String?   @db.VarChar(200)
+  startDate   DateTime  @map("start_date") @db.Date
+  endDate     DateTime? @map("end_date") @db.Date
+  current     Boolean   @default(false)
+  description String?   @db.Text
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamp
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamp
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_experiences")
+}
+
+model UserProject {
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  name        String    @db.VarChar(200)
+  description String?   @db.Text
+  startDate   DateTime? @map("start_date") @db.Date
+  endDate     DateTime? @map("end_date") @db.Date
+  url         String?   @db.VarChar(500)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamp
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamp
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_projects")
+}
+
+model UserEducation {
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  school      String    @db.VarChar(200)
+  degree      String?   @db.VarChar(150)
+  field       String?   @db.VarChar(150)
+  startDate   DateTime? @map("start_date") @db.Date
+  endDate     DateTime? @map("end_date") @db.Date
+  current     Boolean   @default(false)
+  description String?   @db.Text
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamp
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamp
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_educations")
+}
+
+model UserCertification {
+  id           String    @id @default(uuid()) @db.Uuid
+  userId       String    @map("user_id") @db.Uuid
+  name         String    @db.VarChar(200)
+  issuer       String    @db.VarChar(200)
+  issueDate    DateTime  @map("issue_date") @db.Date
+  expiryDate   DateTime? @map("expiry_date") @db.Date
+  credentialId String?   @map("credential_id") @db.VarChar(200)
+  url          String?   @db.VarChar(500)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamp
+  updatedAt    DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamp
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_certifications")
+}
+
+////////////////////////////////////////////////////
+// CAREER ANALYSIS (AI Output)
+////////////////////////////////////////////////////
+
+model CareerAnalysis {
+  id              String   @id @default(uuid()) @db.Uuid
+  userId          String   @map("user_id") @db.Uuid
+  jobId           Int      @map("job_id")
+  matchScore      Int?     @map("match_score")
+  skillGap        String?  @map("skill_gap") @db.Text // JSON
+  aiRecommendation String? @map("ai_recommendation") @db.Text
+  analyzedAt      DateTime @default(now()) @map("analyzed_at") @db.Timestamp
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  job  Job  @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@map("career_analysis")
+  @@unique([userId, jobId])
+}
+
+////////////////////////////////////////////////////
+// CAREER QUEST (RPG Simulation)
+////////////////////////////////////////////////////
+
+model Quest {
+  id            String   @id @default(uuid()) @db.Uuid
+  jobId         Int      @map("job_id")
+  title         String   @db.VarChar(200)
+  scenario      String?  @db.Text
+  optionA       String?  @map("option_a") @db.Text
+  optionB       String?  @map("option_b") @db.Text
+  optionC       String?  @map("option_c") @db.Text
+  correctOption String?  @map("correct_option") @db.Char(1)
+  xpReward      Int?     @map("xp_reward")
+  difficulty    String?  @db.VarChar(30)
+  generatedByAi Boolean  @default(true) @map("generated_by_ai")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamp
+
+  job        Job         @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  userQuests UserQuest[]
+
+  @@map("quests")
+}
+
+model UserQuest {
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  questId     String    @map("quest_id") @db.Uuid
+  status      String?   @db.VarChar(30)
+  score       Int?
+  xpEarned    Int?      @map("xp_earned")
+  completedAt DateTime? @map("completed_at") @db.Timestamp
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  quest Quest @relation(fields: [questId], references: [id], onDelete: Cascade)
+
+  @@map("user_quests")
+}
+
+////////////////////////////////////////////////////
+// ROADMAP (AI Learning Plan)
+////////////////////////////////////////////////////
+
+model Roadmap {
+  id        String          @id @default(uuid()) @db.Uuid
+  userId    String          @map("user_id") @db.Uuid
+  jobId     Int             @map("job_id")
+  title     String          @db.VarChar(200)
+  progress  Int?            @default(0)
+  createdAt DateTime        @default(now()) @map("created_at") @db.Timestamp
+
+  user         User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  job          Job             @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  roadmapSteps RoadmapStep[]
+
+  @@map("roadmaps")
+}
+
+model RoadmapStep {
+  id          String   @id @default(uuid()) @db.Uuid
+  roadmapId   String   @map("roadmap_id") @db.Uuid
+  stepOrder   Int      @map("step_order")
+  title       String   @db.VarChar(200)
+  description String?  @db.Text
+  isCompleted Boolean  @default(false) @map("is_completed")
+
+  roadmap Roadmap @relation(fields: [roadmapId], references: [id], onDelete: Cascade)
+
+  @@map("roadmap_steps")
+}
+
+////////////////////////////////////////////////////
+// CAREER ARENA (Competition)
+////////////////////////////////////////////////////
+
+model Arena {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String   @db.VarChar(200)
+  description String?  @db.Text
+  startDate   DateTime @map("start_date") @db.Date
+  endDate     DateTime @map("end_date") @db.Date
+
+  participants ArenaParticipant[]
+
+  @@map("arenas")
+}
+
+model ArenaParticipant {
+  id         String   @id @default(uuid()) @db.Uuid
+  arenaId    String   @map("arena_id") @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  totalScore Int?     @map("total_score")
+  rank       Int?
+  joinedAt   DateTime @default(now()) @map("joined_at") @db.Timestamp
+
+  arena Arena @relation(fields: [arenaId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("arena_participants")
+}
+
+////////////////////////////////////////////////////
+// BADGES (Gamification)
+////////////////////////////////////////////////////
+
+model Badge {
+  id          Int    @id @default(autoincrement())
+  name        String @db.VarChar(150)
+  description String? @db.Text
+  icon        String? @db.VarChar(200)
+
+  userBadges UserBadge[]
+
+  @@map("badges")
+}
+
+model UserBadge {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  badgeId   Int      @map("badge_id")
+  earnedAt DateTime  @default(now()) @map("earned_at") @db.Timestamp
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  badge Badge @relation(fields: [badgeId], references: [id], onDelete: Cascade)
+
+  @@map("user_badges")
 }

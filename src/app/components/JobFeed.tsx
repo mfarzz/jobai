@@ -1,133 +1,222 @@
+"use client";
+
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { JobCard } from './JobCard';
-import { Sparkles, Clock } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 
-const aiRecommendedJobs = [
-  {
-    id: '1',
-    title: 'Senior UI/UX Designer',
-    company: 'Tokopedia',
-    companyLogo: 'https://images.unsplash.com/photo-1599305445671-ac291c95aaa9?w=100&h=100&fit=crop',
-    location: 'Jakarta, Indonesia',
-    description: 'We are looking for a Senior UI/UX Designer to join our design team. You will work on creating intuitive and engaging user experiences for millions of users.',
-    matchScore: 92,
-    type: 'Full-time',
-    posted: '2 hours ago',
-    salary: 'Rp 15-25 jt/bulan'
-  },
-  {
-    id: '2',
-    title: 'Product Designer',
-    company: 'Gojek',
-    companyLogo: 'https://images.unsplash.com/photo-1611944212129-29977ae1398c?w=100&h=100&fit=crop',
-    location: 'Jakarta, Indonesia (Remote)',
-    description: 'Join our product design team to shape the future of Southeast Asia\'s leading on-demand services platform. Experience with design systems is a plus.',
-    matchScore: 88,
-    type: 'Full-time',
-    posted: '5 hours ago',
-    salary: 'Rp 18-30 jt/bulan'
-  },
-  {
-    id: '3',
-    title: 'UX Researcher',
-    company: 'Shopee',
-    companyLogo: 'https://images.unsplash.com/photo-1560179707-f14e90ef3623?w=100&h=100&fit=crop',
-    location: 'Jakarta, Indonesia',
-    description: 'We need a UX Researcher to help us understand user behavior and improve our e-commerce platform. Conduct user interviews and usability testing.',
-    matchScore: 85,
-    type: 'Full-time',
-    posted: '1 day ago',
-    salary: 'Rp 12-20 jt/bulan'
-  }
-];
-
-const latestJobs = [
-  {
-    id: '4',
-    title: 'UI Designer',
-    company: 'Bukalapak',
-    companyLogo: 'https://images.unsplash.com/photo-1572044162444-ad60f128bdea?w=100&h=100&fit=crop',
-    location: 'Jakarta, Indonesia',
-    description: 'Create beautiful and functional user interfaces for our mobile and web applications. Collaborate with product managers and developers.',
-    matchScore: 78,
-    type: 'Full-time',
-    posted: '3 hours ago',
-    salary: 'Rp 10-18 jt/bulan'
-  },
-  {
-    id: '5',
-    title: 'Visual Designer',
-    company: 'Traveloka',
-    companyLogo: 'https://images.unsplash.com/photo-1551836022-d5d88e9218df?w=100&h=100&fit=crop',
-    location: 'Jakarta, Indonesia (Hybrid)',
-    description: 'We\'re looking for a creative Visual Designer to craft stunning visuals for our marketing campaigns and product features.',
-    matchScore: 75,
-    type: 'Full-time',
-    posted: '6 hours ago',
-    salary: 'Rp 12-22 jt/bulan'
-  },
-  {
-    id: '6',
-    title: 'Interaction Designer',
-    company: 'OVO',
-    companyLogo: 'https://images.unsplash.com/photo-1579389083078-4e7018379f7e?w=100&h=100&fit=crop',
-    location: 'Jakarta, Indonesia',
-    description: 'Design delightful interactions and micro-animations for our fintech products. Strong understanding of motion design required.',
-    matchScore: 82,
-    type: 'Full-time',
-    posted: '8 hours ago',
-    salary: 'Rp 14-24 jt/bulan'
-  },
-  {
-    id: '7',
-    title: 'UX/UI Designer',
-    company: 'Blibli',
-    companyLogo: 'https://images.unsplash.com/photo-1560179707-f14e90ef3623?w=100&h=100&fit=crop',
-    location: 'Jakarta, Indonesia',
-    description: 'Join our design team to create seamless shopping experiences. Work on web and mobile app design with modern tools.',
-    matchScore: 80,
-    type: 'Full-time',
-    posted: '1 day ago',
-    salary: 'Rp 11-19 jt/bulan'
-  }
-];
+interface Job {
+  id: string;
+  title: string;
+  company: string;
+  companyLogo: string;
+  location: string;
+  description: string;
+  matchScore: number;
+  type: string;
+  posted: string;
+  salary: string;
+  url?: string;
+  isHybrid?: boolean;
+  isWfh?: boolean;
+  skills?: string[];
+}
 
 export function JobFeed() {
+  const searchParams = useSearchParams();
+  const searchQuery = searchParams.get("q") || "";
+  const type = searchParams.get("type") || "";
+  const categories = searchParams.getAll("category"); // Support multiple
+  const cities = searchParams.getAll("city"); // Support multiple
+  const remote = searchParams.get("remote") || "";
+  
+  // Memoize string representations for dependency arrays
+  const categoriesKey = useMemo(() => categories.join(','), [categories]);
+  const citiesKey = useMemo(() => cities.join(','), [cities]);
+  
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(true);
+  const [offset, setOffset] = useState(0);
+  const observerRef = useRef<IntersectionObserver | null>(null);
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
+
+  const LIMIT = 10;
+
+  const fetchJobs = useCallback(async (
+    currentOffset: number, 
+    append: boolean = false, 
+    query: string = "",
+    filters: { type?: string; categories?: string[]; cities?: string[]; remote?: string } = {}
+  ) => {
+    try {
+      if (append) {
+        setIsLoadingMore(true);
+      } else {
+        setIsLoading(true);
+      }
+
+      // Build query parameters
+      const params = new URLSearchParams();
+      if (query) params.set("q", query);
+      if (filters.type) params.set("type", filters.type);
+      if (filters.categories) {
+        filters.categories.forEach(cat => params.append("category", cat));
+      }
+      if (filters.cities) {
+        filters.cities.forEach(city => params.append("city", city));
+      }
+      if (filters.remote) params.set("remote", filters.remote);
+      params.set("limit", LIMIT.toString());
+      params.set("offset", currentOffset.toString());
+
+      const response = await fetch(`/api/jobs?${params.toString()}`);
+      const data = await response.json();
+      
+      if (response.ok) {
+        const newJobs = data.jobs || [];
+        
+        if (append) {
+          setJobs(prev => [...prev, ...newJobs]);
+        } else {
+          setJobs(newJobs);
+        }
+
+        // Check if there are more jobs to load
+        setHasMore(newJobs.length === LIMIT);
+        setOffset(currentOffset + newJobs.length);
+      } else {
+        setError(data.error || "Failed to fetch jobs");
+      }
+    } catch (err) {
+      setError("Failed to fetch jobs");
+      console.error("Error fetching jobs:", err);
+    } finally {
+      setIsLoading(false);
+      setIsLoadingMore(false);
+    }
+  }, []);
+
+  // Initial load and when search query or filters change
+  useEffect(() => {
+    setOffset(0);
+    setJobs([]);
+    fetchJobs(0, false, searchQuery, { type, categories, cities, remote });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchQuery, type, categoriesKey, citiesKey, remote]);
+
+  // Intersection Observer for lazy loading
+  useEffect(() => {
+    if (!hasMore || isLoadingMore) return;
+
+    observerRef.current = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasMore && !isLoadingMore) {
+          fetchJobs(offset, true, searchQuery, { type, categories, cities, remote });
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    if (loadMoreRef.current) {
+      observerRef.current.observe(loadMoreRef.current);
+    }
+
+    return () => {
+      if (observerRef.current) {
+        observerRef.current.disconnect();
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasMore, isLoadingMore, offset, searchQuery, type, categoriesKey, citiesKey, remote]);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-red-600">{error}</p>
+      </div>
+    );
+  }
+
+  // Build filter display text
+  const activeFilters: string[] = [];
+  if (type) activeFilters.push(`Type: ${type}`);
+  if (categories.length > 0) activeFilters.push(`Category: ${categories.join(', ')}`);
+  if (cities.length > 0) activeFilters.push(`Location: ${cities.join(', ')}`);
+  if (remote === 'true') activeFilters.push('Remote');
+
   return (
-    <div className="space-y-6">
-      {/* AI Recommended Section */}
-      <div>
-        <div className="flex items-center gap-2 mb-4">
-          <Sparkles className="w-5 h-5 text-blue-600" />
-          <h2>For You - AI Recommended</h2>
-          <span className="text-slate-500">(Based on your profile)</span>
+    <div className="space-y-4">
+      {/* Search Results Header */}
+      {(searchQuery || activeFilters.length > 0) && (
+        <div className="mb-4">
+          {searchQuery && (
+            <p className="text-sm text-slate-600">
+              Menampilkan hasil untuk: <span className="font-semibold text-slate-900">&quot;{searchQuery}&quot;</span>
+            </p>
+          )}
+          {activeFilters.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2 mt-2">
+              <span className="text-sm text-slate-600">Filter:</span>
+              {activeFilters.map((filter, idx) => (
+                <span key={idx} className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">
+                  {filter}
+                </span>
+              ))}
+            </div>
+          )}
+          {jobs.length > 0 && !isLoading && (
+            <p className="text-sm text-slate-500 mt-2">
+              {jobs.length} hasil ditemukan
+            </p>
+          )}
         </div>
-        <div className="space-y-4">
-          {aiRecommendedJobs.map((job) => (
+      )}
+
+      {jobs.length > 0 ? (
+        <>
+          {jobs.map((job) => (
             <JobCard key={job.id} job={job} />
           ))}
+          
+          {/* Load More Trigger */}
+          <div ref={loadMoreRef} className="py-4">
+            {isLoadingMore && (
+              <div className="flex items-center justify-center py-4">
+                <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
+              </div>
+            )}
+            {!hasMore && jobs.length > 0 && (
+              <p className="text-center text-slate-500 py-4">
+                Tidak ada lowongan lagi
+              </p>
+            )}
+          </div>
+        </>
+      ) : !isLoading ? (
+        <div className="text-center py-12">
+          <p className="text-slate-500 mb-2">
+            {searchQuery 
+              ? `Tidak ada lowongan ditemukan untuk &quot;${searchQuery}&quot;` 
+              : "Tidak ada lowongan ditemukan."}
+          </p>
+          {searchQuery && (
+            <p className="text-sm text-slate-400">
+              Coba gunakan kata kunci yang berbeda
+            </p>
+          )}
         </div>
-      </div>
-
-      {/* Latest Jobs Section */}
-      <div>
-        <div className="flex items-center gap-2 mb-4">
-          <Clock className="w-5 h-5 text-slate-600" />
-          <h2>Latest Jobs</h2>
-          <span className="text-slate-500">(Real-time updates)</span>
-        </div>
-        <div className="space-y-4">
-          {latestJobs.map((job) => (
-            <JobCard key={job.id} job={job} />
-          ))}
-        </div>
-      </div>
-
-      {/* Load More */}
-      <div className="text-center py-4">
-        <button className="text-blue-600 hover:text-blue-700 hover:underline">
-          Load more jobs...
-        </button>
-      </div>
+      ) : null}
     </div>
   );
 }
