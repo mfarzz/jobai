@@ -1,36 +1,81 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# CareerPlay
 
-## Getting Started
+CareerPlay adalah platform kesiapan karir berbasis web yang memadukan pencarian lowongan, analisis kecocokan, dan simulasi job bergaya quest/gamifikasi. Dibangun dengan Next.js (App Router) + Prisma, dan memanfaatkan AI untuk membuat soal situasional/teknis serta umpan balik instan.
 
-First, run the development server:
+## Fitur Utama
+- **Pencarian & Saved Jobs**: Telusuri/filter lowongan (tipe, kategori, lokasi), simpan/unsave, lihat detail perusahaan & status tersimpan.
+- **Profil & CV Parsing**: Unggah CV untuk ekstraksi otomatis (skills, pengalaman, proyek, edukasi, sertifikat); hasilnya bisa diedit pengguna.
+- **Analisis Kecocokan**: Hitung skill gap, skor kecocokan, dan rekomendasi langkah berikut.
+- **Simulasi Job (3 soal/sesi)**: Tiap sesi memuat 3 soal SJT/teknis dengan opsi A/B/C dan XP berbeda, jawaban terbaik tunggal, plus penjelasan per opsi. Setelah 3 soal selesai hanya ada tombol **Tutup**; sesi baru dimulai lewat **“Mulai Simulasi Job (3 soal)”**.
+- **UI Modern**: Next.js + Tailwind + shadcn/ui; overlay quest, quick insights, dan navigasi profil ringkas.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## Teknologi
+- Frontend: Next.js (React, App Router), TypeScript, Tailwind CSS, shadcn/ui.
+- Backend: Next.js route handlers, Prisma ORM, database SQL.
+- Auth: NextAuth (OAuth/email).
+- AI: Model generatif (Gemini) untuk soal + feedback; parsing CV untuk ekstraksi profil.
+
+## Struktur Folder (ringkas)
+```
+app/                       # Halaman & route handlers API (App Router)
+  api/                     # Endpoint Next.js (simulate, analyze, profile, jobs, auth, quests)
+    auth/                  # Register/login handlers
+    jobs/                  # Job listing, detail, save, simulate, analyze
+    profile/               # CRUD profil, skills, experience, education, certifications, import CV
+    quests/                # Submit jawaban quest
+  components/              # Komponen UI (JobCard, LeftSidebar, dsb.)
+    ui/                    # Komponen dasar shadcn/ui
+  jobs/[id]/               # Halaman detail job + overlay simulasi 3 soal
+  profile/                 # Halaman profil pengguna
+  saved/                   # Halaman saved jobs
+  login/, register/        # Auth pages
+  providers/               # Penyedia context (theme/auth, dll.)
+lib/                       # Auth config, prisma client, utils
+types/                     # Deklarasi tipe NextAuth
+prisma/                    # schema.prisma & migrasi
+public/                    # Aset statis
+scripts/                   # Utilitas (import job, seed profil)
+next.config.ts, eslint*, tsconfig*  # Konfigurasi proyek
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Menjalankan Secara Lokal
+1) Instal dependensi
+```bash
+npm install
+```
+2) Siapkan environment variables (buat `.env`):
+```
+DATABASE_URL=postgresql://user:pass@host:5432/db
+NEXTAUTH_SECRET=your-secret
+NEXTAUTH_URL=http://localhost:3000
+GEMINI_API_KEY=your-gemini-key
+```
+3) Migrasi database (jika diperlukan)
+```bash
+npx prisma migrate dev
+```
+4) Jalankan development server
+```bash
+npm run dev
+# buka http://localhost:3000
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Skrip NPM
+- `npm run dev` – Development server.
+- `npm run build` – Build produksi.
+- `npm run start` – Menjalankan build produksi.
+- `npm run lint` – Pemeriksaan linting.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Alur Pengguna (singkat)
+- Login/registrasi → unggah CV → periksa & edit profil.
+- Telusuri/filter lowongan → simpan job → buka detail perusahaan.
+- Jalankan analisis kecocokan → dapatkan skor, gap, dan rekomendasi.
+- Mulai simulasi → jawab 3 soal berurutan → Tutup → mulai sesi baru bila perlu.
 
-## Learn More
+## Catatan Implementasi
+- Simulasi menghasilkan batch 3 soal per sesi; status jawaban disimpan per quest.
+- Ekstraksi CV mem-populate entitas profil, tetap bisa diedit manual.
+- Saved jobs, analisis, dan simulasi terkait sesi pengguna (NextAuth).
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Lisensi
+Internal use. Sesuaikan per kebutuhan proyek/lomba Anda.
