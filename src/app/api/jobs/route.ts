@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 
 function formatTimeAgo(date: Date | null): string {
   if (!date) return "Unknown";
@@ -80,6 +82,7 @@ function extractCityFromLocation(location: string | null): string | null {
 
 export async function GET(request: NextRequest) {
   try {
+    const [session] = await Promise.all([getServerSession(authOptions)]);
     const searchParams = request.nextUrl.searchParams;
     const query = searchParams.get("q");
     const type = searchParams.get("type");
@@ -193,6 +196,18 @@ export async function GET(request: NextRequest) {
     // Apply pagination
     const paginatedJobs = jobs.slice(offset, offset + limit);
 
+    let savedJobIds: Set<number> | null = null;
+    if (session?.user?.id && paginatedJobs.length > 0) {
+      const saved = await prisma.savedJob.findMany({
+        where: {
+          userId: session.user.id,
+          jobId: { in: paginatedJobs.map((j) => j.id) },
+        },
+        select: { jobId: true },
+      });
+      savedJobIds = new Set(saved.map((s) => s.jobId));
+    }
+
     // Transform to match JobFeed interface
     const transformedJobs = paginatedJobs.map((job) => ({
       id: job.id.toString(),
@@ -209,6 +224,7 @@ export async function GET(request: NextRequest) {
       isHybrid: job.isHybrid || false,
       isWfh: job.isWfh || false,
       skills: job.jobSkills.map((skill) => skill.skillName),
+      isSaved: savedJobIds ? savedJobIds.has(job.id) : false,
     }));
 
     return NextResponse.json({

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import type { ChangeEvent } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
@@ -107,6 +108,19 @@ export default function ProfilePage() {
     credentialId: string;
     url: string;
   }>>([]);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [cvFile, setCvFile] = useState<File | null>(null);
+  const [importingCv, setImportingCv] = useState(false);
+  const [importSummary, setImportSummary] = useState<null | {
+    message: string;
+    inserted: {
+      skills: number;
+      experiences: number;
+      projects: number;
+      educations: number;
+      certifications: number;
+    };
+  }>(null);
   const [educations, setEducations] = useState<Array<{
     id: string;
     school: string;
@@ -772,6 +786,56 @@ export default function ProfilePage() {
     }
   };
 
+  const handleCvFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    setCvFile(file || null);
+  };
+
+  const handleImportCv = async () => {
+    if (!cvFile) {
+      toast.error("Pilih file CV dulu");
+      return;
+    }
+
+    setImportingCv(true);
+    setImportSummary(null);
+    try {
+      const formData = new FormData();
+      formData.append("file", cvFile);
+
+      const res = await fetch("/api/profile/import", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Gagal impor CV");
+      }
+
+      const data = await res.json();
+      setImportSummary({
+        message: data.message,
+        inserted: data.inserted,
+      });
+      toast.success("CV berhasil diimpor. Data profil diperbarui.");
+
+      // Reset caches supaya tab lain refetch saat dibuka
+      setLoadedTabs(new Set());
+      setSkills([]);
+      setExperiences([]);
+      setProjects([]);
+      setEducations([]);
+      setCertifications([]);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Gagal memproses CV";
+      toast.error(message);
+    } finally {
+      setImportingCv(false);
+    }
+  };
+
   if (status === "loading") {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
@@ -842,11 +906,11 @@ export default function ProfilePage() {
               <TabsTrigger value="projects">Projects</TabsTrigger>
               <TabsTrigger value="education">Education</TabsTrigger>
             </TabsList>
-            <TabsList className="grid w-full grid-cols-3 gap-1">
-              <TabsTrigger value="certifications">Certifications</TabsTrigger>
-              <TabsTrigger value="skills">Skills</TabsTrigger>
-              <TabsTrigger value="cv">CV & Documents</TabsTrigger>
-            </TabsList>
+          <TabsList className="grid w-full grid-cols-3 gap-1">
+            <TabsTrigger value="certifications">Certifications</TabsTrigger>
+            <TabsTrigger value="skills">Skills</TabsTrigger>
+            <TabsTrigger value="cv">CV & Documents</TabsTrigger>
+          </TabsList>
           </div>
 
           {/* Overview Tab */}
@@ -1351,6 +1415,98 @@ export default function ProfilePage() {
               </CardContent>
             </Card>
             )}
+          </TabsContent>
+
+          {/* CV Tab */}
+          <TabsContent value="cv">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>Impor CV</CardTitle>
+                    <CardDescription>
+                      Upload CV (PDF/DOCX/TXT). File tidak disimpan; hanya diekstrak.
+                    </CardDescription>
+                  </div>
+                  <Button
+                    variant="outline"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <FileText className="w-4 h-4 mr-2" />
+                    Pilih File
+                  </Button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    className="hidden"
+                    accept=".pdf,.doc,.docx,.txt"
+                    onChange={handleCvFileChange}
+                  />
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="p-4 bg-blue-50 border border-blue-100 rounded-lg flex items-start gap-3">
+                  <Sparkles className="w-5 h-5 text-blue-600 mt-0.5" />
+                  <div className="text-sm text-slate-700">
+                    <p className="font-semibold text-slate-900">Tips akurasi:</p>
+                    <ul className="list-disc list-inside space-y-1">
+                      <li>Gunakan CV teks (bukan gambar) agar parser lebih akurat.</li>
+                      <li>Pastikan ada section Skills, Experience, Projects, Education, Certifications.</li>
+                      <li>Ukuran maksimal 10MB.</li>
+                    </ul>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between border rounded-lg p-4">
+                  <div>
+                    <p className="text-sm text-slate-500">File terpilih</p>
+                    <p className="font-medium text-slate-900">
+                      {cvFile ? cvFile.name : "Belum ada file"}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      Ganti File
+                    </Button>
+                    <Button onClick={handleImportCv} disabled={!cvFile || importingCv}>
+                      {importingCv ? (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                          Memproses...
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="w-4 h-4 mr-2" />
+                          Impor CV
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+
+                {importSummary && (
+                  <div className="rounded-lg border border-green-200 bg-green-50 p-4 space-y-2">
+                    <div className="flex items-center gap-2 text-green-800 font-semibold">
+                      <CheckCircle2 className="w-5 h-5" />
+                      {importSummary.message}
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-sm text-green-900">
+                      <div>Skills: {importSummary.inserted.skills}</div>
+                      <div>Experience: {importSummary.inserted.experiences}</div>
+                      <div>Projects: {importSummary.inserted.projects}</div>
+                      <div>Education: {importSummary.inserted.educations}</div>
+                      <div>Certifications: {importSummary.inserted.certifications}</div>
+                    </div>
+                    <p className="text-xs text-green-800">
+                      Silakan buka tab Skills/Experience/Projects/Education/Certifications untuk melihat data terbaru.
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </TabsContent>
 
           {/* Projects Tab */}

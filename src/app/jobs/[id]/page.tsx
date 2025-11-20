@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { TopNav } from "@/app/components/TopNav";
@@ -10,6 +10,7 @@ import { Badge } from "@/app/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/app/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/app/components/ui/avatar";
 import { Separator } from "@/app/components/ui/separator";
+import { toast } from "sonner";
 import {
   MapPin,
   Clock,
@@ -23,6 +24,7 @@ import {
   Users,
   Calendar,
   Bookmark,
+  BookmarkCheck,
   Sparkles,
   CheckCircle2,
   XCircle,
@@ -66,6 +68,7 @@ interface JobDetail {
     logo: string | null;
   } | null;
   industry: string | null;
+  isSaved?: boolean;
 }
 
 
@@ -80,6 +83,38 @@ interface CareerAnalysis {
   analyzedAt: string;
 }
 
+interface QuestOption {
+  label: "A" | "B" | "C";
+  text: string;
+  xp: number;
+}
+
+interface QuestData {
+  id: string;
+  question: string;
+  options: QuestOption[];
+  correctOption?: string | null;
+  explanations?: Record<string, string | null | undefined>;
+}
+
+interface QuestResult {
+  status: string | null;
+  xpEarned: number | null;
+  isCorrect: boolean | null;
+  aiFeedback?: string | null;
+  selectedOption?: string | null;
+  correctOption?: string | null;
+}
+
+const createEmptyResult = (): QuestResult => ({
+  status: null,
+  xpEarned: null,
+  isCorrect: null,
+  aiFeedback: null,
+  selectedOption: null,
+  correctOption: null,
+});
+
 export default function JobDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -91,6 +126,66 @@ export default function JobDetailPage() {
   const [analysis, setAnalysis] = useState<CareerAnalysis | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [showAnalysis, setShowAnalysis] = useState(false);
+  const [isSaved, setIsSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [quests, setQuests] = useState<QuestData[]>([]);
+  const [currentQuestIndex, setCurrentQuestIndex] = useState(0);
+  const [completedQuestIds, setCompletedQuestIds] = useState<string[]>([]);
+  const [questLoading, setQuestLoading] = useState(false);
+  const [questError, setQuestError] = useState<string | null>(null);
+  const [selectedOption, setSelectedOption] = useState<string | null>(null);
+  const [submitResult, setSubmitResult] = useState<QuestResult>(() =>
+    createEmptyResult()
+  );
+  const [submitting, setSubmitting] = useState(false);
+  const [showQuestOverlay, setShowQuestOverlay] = useState(false);
+  const analysisRef = useRef<HTMLDivElement | null>(null);
+  const questRef = useRef<HTMLDivElement | null>(null);
+  const highlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
+  const [highlightedSection, setHighlightedSection] = useState<
+    "analysis" | "quest" | null
+  >(null);
+  const currentQuest = quests[currentQuestIndex] || null;
+  const totalQuests = quests.length;
+  const completedCount = completedQuestIds.length;
+  const isLastQuest = totalQuests > 0 && currentQuestIndex === totalQuests - 1;
+  const progressLabel = totalQuests
+    ? `Soal ${currentQuestIndex + 1} dari ${totalQuests} • ${completedCount}/${totalQuests} selesai`
+    : null;
+
+  const focusSection = (section: "analysis" | "quest") => {
+    if (highlightTimeoutRef.current) {
+      clearTimeout(highlightTimeoutRef.current);
+    }
+    const targetRef = section === "analysis" ? analysisRef : questRef;
+    requestAnimationFrame(() => {
+      targetRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+    setHighlightedSection(section);
+    highlightTimeoutRef.current = setTimeout(() => {
+      setHighlightedSection(null);
+    }, 1600);
+  };
+
+  const resetQuestState = () => {
+    setQuests([]);
+    setCurrentQuestIndex(0);
+    setCompletedQuestIds([]);
+    setSelectedOption(null);
+    setQuestError(null);
+    setSubmitResult(createEmptyResult());
+    setShowQuestOverlay(false);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (highlightTimeoutRef.current) {
+        clearTimeout(highlightTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Fetch job details
   useEffect(() => {
@@ -102,6 +197,7 @@ export default function JobDetailPage() {
 
         if (response.ok) {
           setJob(data);
+          setIsSaved(Boolean(data.isSaved));
         } else {
           setError(data.error || "Job not found");
         }
@@ -136,8 +232,76 @@ export default function JobDetailPage() {
 
     if (session?.user?.id && params.id) {
       checkExistingAnalysis();
+      fetchQuest();
     }
   }, [session?.user?.id, params.id]);
+
+  const fetchQuest = async () => {
+    if (!params.id) return;
+    try {
+      setQuestLoading(true);
+      setQuestError(null);
+      const res = await fetch(`/api/jobs/${params.id}/simulate?count=3`);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Gagal memuat simulasi");
+      }
+      const data = await res.json();
+      const incomingQuests: QuestData[] = Array.isArray(data.quests)
+        ? data.quests
+        : data.quest
+        ? [data.quest]
+        : [];
+
+      const userQuestResults: Record<string, QuestResult> = {};
+      if (Array.isArray(data.userQuests)) {
+        data.userQuests.forEach((uq: any) => {
+          if (!uq?.questId) return;
+          userQuestResults[uq.questId] = {
+            status: uq.status,
+            xpEarned: uq.xpEarned,
+            isCorrect:
+              typeof uq.isCorrect === "boolean"
+                ? uq.isCorrect
+                : uq.status === "completed",
+            aiFeedback: uq.aiFeedback,
+            selectedOption: uq.selectedOption,
+            correctOption: uq.correctOption,
+          };
+        });
+      } else if (data.userQuest && data.quest?.id) {
+        userQuestResults[data.quest.id] = {
+          status: data.userQuest.status,
+          xpEarned: data.userQuest.xpEarned,
+          isCorrect: data.userQuest.status === "completed",
+          aiFeedback: data.userQuest.aiFeedback,
+          selectedOption: data.userQuest.selectedOption,
+          correctOption: data.quest?.correctOption,
+        };
+      }
+
+      if (incomingQuests.length) {
+        setQuests(incomingQuests);
+        setCurrentQuestIndex(0);
+        setCompletedQuestIds(Object.keys(userQuestResults));
+        setSubmitResult(
+          userQuestResults[incomingQuests[0].id] || createEmptyResult()
+        );
+        setSelectedOption(null);
+        setShowQuestOverlay(true);
+        setTimeout(() => focusSection("quest"), 150);
+      } else {
+        resetQuestState();
+      }
+    } catch (error) {
+      console.error("Error fetching quest:", error);
+      setQuestError(
+        error instanceof Error ? error.message : "Gagal memuat simulasi"
+      );
+    } finally {
+      setQuestLoading(false);
+    }
+  };
 
   // Handle analysis trigger
   const handleAnalyze = async () => {
@@ -150,6 +314,7 @@ export default function JobDetailPage() {
       // Immediately show analysis panel with loading state
       setShowAnalysis(true);
       setIsAnalyzing(true);
+      setTimeout(() => focusSection("analysis"), 150);
       
       const response = await fetch(`/api/jobs/${params.id}/analyze`, {
         method: "POST",
@@ -172,6 +337,141 @@ export default function JobDetailPage() {
       setIsAnalyzing(false);
     }
   };
+
+  const handleShowAnalysisPanel = () => {
+    setShowAnalysis(true);
+    setTimeout(() => focusSection("analysis"), 120);
+  };
+
+  const handleToggleSave = async () => {
+    if (!session?.user?.id) {
+      router.push("/login");
+      return;
+    }
+    if (!params.id) return;
+    try {
+      setSaving(true);
+      const res = await fetch(`/api/jobs/${params.id}/save`, { method: "POST" });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Gagal menyimpan pekerjaan");
+      }
+      const data = await res.json();
+      setIsSaved(Boolean(data.saved));
+      toast.success(data.saved ? "Job disimpan" : "Job dihapus");
+    } catch (error) {
+      console.error("Error toggling save:", error);
+      toast.error("Gagal menyimpan pekerjaan");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleGenerateQuest = async () => {
+    if (!session?.user?.id) {
+      router.push("/login");
+      return;
+    }
+    try {
+      setQuestLoading(true);
+      setQuestError(null);
+      setSelectedOption(null);
+      setSubmitResult(createEmptyResult());
+      setCompletedQuestIds([]);
+      const res = await fetch(`/api/jobs/${params.id}/simulate?count=3`, {
+        method: "POST",
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Gagal membuat simulasi");
+      }
+      const data = await res.json();
+      const incomingQuests: QuestData[] = Array.isArray(data.quests)
+        ? data.quests
+        : data.quest
+        ? [data.quest]
+        : [];
+      if (incomingQuests.length) {
+        setQuests(incomingQuests);
+        setCurrentQuestIndex(0);
+        setShowQuestOverlay(true);
+        setTimeout(() => focusSection("quest"), 150);
+      } else {
+        resetQuestState();
+      }
+    } catch (error) {
+      console.error("Error generating quest:", error);
+      setQuestError(
+        error instanceof Error ? error.message : "Gagal membuat simulasi"
+      );
+    } finally {
+      setQuestLoading(false);
+    }
+  };
+
+  const handleCloseQuestView = () => {
+    resetQuestState();
+  };
+
+  const handleSubmitQuest = async () => {
+    if (!currentQuest || !selectedOption) return;
+    try {
+      setSubmitting(true);
+      const res = await fetch(`/api/quests/${currentQuest.id}/submit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ option: selectedOption }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Gagal mengirim jawaban");
+      }
+      const data = await res.json();
+      setSubmitResult({
+        status: data.status,
+        xpEarned: data.xpEarned,
+        isCorrect: data.isCorrect,
+        aiFeedback: data.aiFeedback,
+        selectedOption: data.selectedOption,
+        correctOption: data.correctOption,
+      });
+      setCompletedQuestIds((prev) =>
+        prev.includes(currentQuest.id) ? prev : [...prev, currentQuest.id]
+      );
+      setSelectedOption(null);
+      setTimeout(() => focusSection("quest"), 150);
+    } catch (error) {
+      console.error("Error submitting quest:", error);
+      setQuestError(
+        error instanceof Error ? error.message : "Gagal mengirim jawaban"
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleNextQuest = () => {
+    if (currentQuestIndex < quests.length - 1) {
+      const nextIndex = currentQuestIndex + 1;
+      setCurrentQuestIndex(nextIndex);
+      setSubmitResult(createEmptyResult());
+      setSelectedOption(null);
+      setQuestError(null);
+      setTimeout(() => focusSection("quest"), 150);
+    }
+  };
+
+  const analysisHighlightClass =
+    highlightedSection === "analysis"
+      ? "ring-2 ring-blue-300 shadow-xl shadow-blue-100 scale-[1.01]"
+      : "";
+  const questHighlightClass =
+    highlightedSection === "quest"
+      ? "ring-2 ring-blue-300 shadow-xl shadow-blue-100 scale-[1.01]"
+      : "";
+  const hasQuestSubmission = Boolean(submitResult.status);
+  const shouldShowQuestOverlay = Boolean(currentQuest && showQuestOverlay);
+  const isLastQuestionAnswered = isLastQuest && hasQuestSubmission;
 
   if (isLoading) {
     return (
@@ -316,259 +616,269 @@ export default function JobDetailPage() {
           <div className={`${showAnalysis ? 'lg:col-span-1' : 'lg:col-span-1'} space-y-6 transition-all duration-500 ease-in-out`}>
             {/* Loading Panel */}
             {showAnalysis && isAnalyzing && (
-              <Card className="sticky top-20 h-fit shadow-lg animate-fade-in-slide-right">
-                <CardHeader className="pb-4">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="flex items-center gap-2 text-xl">
-                      <Sparkles className="w-6 h-6 text-blue-600 animate-pulse" />
-                      Menganalisis Kecocokan
-                    </CardTitle>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-6 py-12">
-                  <div className="flex flex-col items-center justify-center space-y-6">
-                    {/* Animated Loading Spinner */}
-                    <div className="relative">
-                      <Loader2 className="w-16 h-16 animate-spin text-blue-600" />
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <div className="w-12 h-12 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
+              <div ref={analysisRef} className="scroll-mt-24">
+                <Card className={`sticky top-20 h-fit shadow-lg animate-fade-in-slide-right transition-all duration-300 ${analysisHighlightClass}`}>
+                  <CardHeader className="pb-4">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="flex items-center gap-2 text-xl">
+                        <Sparkles className="w-6 h-6 text-blue-600 animate-pulse" />
+                        Menganalisis Kecocokan
+                      </CardTitle>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-6 py-12">
+                    <div className="flex flex-col items-center justify-center space-y-6">
+                      {/* Animated Loading Spinner */}
+                      <div className="relative">
+                        <Loader2 className="w-16 h-16 animate-spin text-blue-600" />
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <div className="w-12 h-12 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
+                        </div>
                       </div>
-                    </div>
-                    
-                    {/* Loading Text with Animation */}
-                    <div className="text-center space-y-2">
-                      <h3 className="text-lg font-semibold text-slate-900">
-                        Menganalisis Profil Anda...
-                      </h3>
-                      <p className="text-sm text-slate-600 max-w-sm">
-                        Kami sedang menganalisis skills, pengalaman, pendidikan, sertifikasi, dan proyek Anda untuk menentukan kecocokan dengan posisi ini.
-                      </p>
-                    </div>
+                      
+                      {/* Loading Text with Animation */}
+                      <div className="text-center space-y-2">
+                        <h3 className="text-lg font-semibold text-slate-900">
+                          Menganalisis Profil Anda...
+                        </h3>
+                        <p className="text-sm text-slate-600 max-w-sm">
+                          Kami sedang menganalisis skills, pengalaman, pendidikan, sertifikasi, dan proyek Anda untuk menentukan kecocokan dengan posisi ini.
+                        </p>
+                        <div className="mt-3 space-y-2">
+                          <div className="mx-auto h-2 w-48 rounded-full bg-slate-200 overflow-hidden">
+                            <div className="h-full w-1/2 bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 animate-pulse" />
+                          </div>
+                          <p className="text-xs text-blue-600 font-medium">AI sedang bekerja untukmu</p>
+                        </div>
+                      </div>
 
-                    {/* Loading Steps with staggered animation */}
-                    <div className="w-full max-w-sm space-y-3">
-                      <div className="flex items-center gap-3 text-sm text-slate-600 animate-fade-in">
-                        <div className="w-2 h-2 bg-blue-600 rounded-full animate-pulse"></div>
-                        <span>Menganalisis skills dan kualifikasi...</span>
-                      </div>
-                      <div className="flex items-center gap-3 text-sm text-slate-500 animate-fade-in" style={{ animationDelay: '0.3s', animationFillMode: 'both' }}>
-                        <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse" style={{ animationDelay: '0.3s' }}></div>
-                        <span>Mengevaluasi pengalaman kerja...</span>
-                      </div>
-                      <div className="flex items-center gap-3 text-sm text-slate-500 animate-fade-in" style={{ animationDelay: '0.6s', animationFillMode: 'both' }}>
-                        <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse" style={{ animationDelay: '0.6s' }}></div>
-                        <span>Menghitung skor kecocokan...</span>
+                      {/* Loading Steps with staggered animation */}
+                      <div className="w-full max-w-sm space-y-3">
+                        <div className="flex items-center gap-3 text-sm text-slate-600 animate-fade-in">
+                          <div className="w-2 h-2 bg-blue-600 rounded-full animate-pulse"></div>
+                          <span>Menganalisis skills dan kualifikasi...</span>
+                        </div>
+                        <div className="flex items-center gap-3 text-sm text-slate-500 animate-fade-in" style={{ animationDelay: '0.3s', animationFillMode: 'both' }}>
+                          <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse" style={{ animationDelay: '0.3s' }}></div>
+                          <span>Mengevaluasi pengalaman kerja...</span>
+                        </div>
+                        <div className="flex items-center gap-3 text-sm text-slate-500 animate-fade-in" style={{ animationDelay: '0.6s', animationFillMode: 'both' }}>
+                          <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse" style={{ animationDelay: '0.6s' }}></div>
+                          <span>Menghitung skor kecocokan...</span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
+              </div>
             )}
 
             {/* Analysis Results Panel */}
             {showAnalysis && !isAnalyzing && analysis ? (
-              <Card className="sticky top-20 h-fit shadow-lg animate-fade-in-slide-right">
-                <CardHeader className="pb-4">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="flex items-center gap-2 text-xl">
-                      <Sparkles className="w-6 h-6 text-blue-600" />
-                      Hasil Analisis Kecocokan
-                    </CardTitle>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setShowAnalysis(false)}
-                      className="h-8 w-8 p-0"
-                    >
-                      <XCircle className="w-5 h-5" />
-                    </Button>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  {/* Match Score */}
-                  <div className="text-center">
-                    <div className="relative inline-flex items-center justify-center w-32 h-32 mb-4">
-                      <svg className="w-32 h-32 transform -rotate-90">
-                        <circle
-                          cx="64"
-                          cy="64"
-                          r="56"
-                          stroke="currentColor"
-                          strokeWidth="8"
-                          fill="none"
-                          className="text-slate-200"
-                        />
-                        <circle
-                          cx="64"
-                          cy="64"
-                          r="56"
-                          stroke="currentColor"
-                          strokeWidth="8"
-                          fill="none"
-                          strokeDasharray={`${2 * Math.PI * 56}`}
-                          strokeDashoffset={`${2 * Math.PI * 56 * (1 - analysis.matchScore / 100)}`}
-                          className={`transition-all duration-1000 ${
-                            analysis.matchScore >= 70
-                              ? "text-green-600"
-                              : analysis.matchScore >= 50
-                              ? "text-yellow-500"
-                              : "text-red-500"
-                          }`}
-                        />
-                      </svg>
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <div className="text-center">
-                          <div
-                            className={`text-3xl font-bold ${
+              <div ref={analysisRef} className="scroll-mt-24">
+                <Card className={`sticky top-20 h-fit shadow-lg animate-fade-in-slide-right transition-all duration-300 ${analysisHighlightClass}`}>
+                  <CardHeader className="pb-4">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="flex items-center gap-2 text-xl">
+                        <Sparkles className="w-6 h-6 text-blue-600" />
+                        Hasil Analisis Kecocokan
+                      </CardTitle>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setShowAnalysis(false)}
+                        className="h-8 w-8 p-0"
+                      >
+                        <XCircle className="w-5 h-5" />
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    {/* Match Score */}
+                    <div className="text-center">
+                      <div className="relative inline-flex items-center justify-center w-32 h-32 mb-4">
+                        <svg className="w-32 h-32 transform -rotate-90">
+                          <circle
+                            cx="64"
+                            cy="64"
+                            r="56"
+                            stroke="currentColor"
+                            strokeWidth="8"
+                            fill="none"
+                            className="text-slate-200"
+                          />
+                          <circle
+                            cx="64"
+                            cy="64"
+                            r="56"
+                            stroke="currentColor"
+                            strokeWidth="8"
+                            fill="none"
+                            strokeDasharray={`${2 * Math.PI * 56}`}
+                            strokeDashoffset={`${2 * Math.PI * 56 * (1 - analysis.matchScore / 100)}`}
+                            className={`transition-all duration-1000 ${
                               analysis.matchScore >= 70
                                 ? "text-green-600"
                                 : analysis.matchScore >= 50
                                 ? "text-yellow-500"
                                 : "text-red-500"
                             }`}
-                          >
-                            {analysis.matchScore}%
+                          />
+                        </svg>
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <div className="text-center">
+                            <div
+                              className={`text-3xl font-bold ${
+                                analysis.matchScore >= 70
+                                  ? "text-green-600"
+                                  : analysis.matchScore >= 50
+                                  ? "text-yellow-500"
+                                  : "text-red-500"
+                              }`}
+                            >
+                              {analysis.matchScore}%
+                            </div>
+                            <div className="text-xs text-slate-600">Kecocokan</div>
                           </div>
-                          <div className="text-xs text-slate-600">Kecocokan</div>
                         </div>
                       </div>
-                    </div>
-                    <div className="flex items-center justify-center gap-2">
-                      {analysis.matchScore >= 70 ? (
-                        <>
-                          <CheckCircle2 className="w-5 h-5 text-green-600" />
-                          <span className="text-sm font-medium text-green-600">
-                            Sangat Cocok
-                          </span>
-                        </>
-                      ) : analysis.matchScore >= 50 ? (
-                        <>
-                          <AlertCircle className="w-5 h-5 text-yellow-500" />
-                          <span className="text-sm font-medium text-yellow-500">
-                            Cukup Cocok
-                          </span>
-                        </>
-                      ) : (
-                        <>
-                          <XCircle className="w-5 h-5 text-red-500" />
-                          <span className="text-sm font-medium text-red-500">
-                            Perlu Peningkatan
-                          </span>
-                        </>
-                      )}
-                    </div>
-                  </div>
-
-                  <Separator />
-
-                  {/* Skill Gap */}
-                  {analysis.skillGap && (
-                    <div className="space-y-4">
-                      {/* Missing Skills */}
-                      {analysis.skillGap.missing && analysis.skillGap.missing.length > 0 && (
-                        <div>
-                          <div className="flex items-center gap-2 mb-2">
-                            <XCircle className="w-4 h-4 text-red-500" />
-                            <span className="text-sm font-semibold text-slate-900">
-                              Skills yang Kurang
+                      <div className="flex items-center justify-center gap-2">
+                        {analysis.matchScore >= 70 ? (
+                          <>
+                            <CheckCircle2 className="w-5 h-5 text-green-600" />
+                            <span className="text-sm font-medium text-green-600">
+                              Sangat Cocok
                             </span>
-                          </div>
-                          <div className="space-y-2">
-                            {analysis.skillGap.missing.map((skill, idx) => (
-                              <div
-                                key={idx}
-                                className="flex items-center justify-between p-2 bg-red-50 rounded-md"
-                              >
-                                <span className="text-sm text-slate-700">
-                                  {skill.skill}
-                                </span>
-                                <Badge
-                                  variant="outline"
-                                  className={`text-xs ${
-                                    skill.importance === "high"
-                                      ? "border-red-500 text-red-700"
-                                      : skill.importance === "medium"
-                                      ? "border-orange-500 text-orange-700"
-                                      : "border-yellow-500 text-yellow-700"
-                                  }`}
+                          </>
+                        ) : analysis.matchScore >= 50 ? (
+                          <>
+                            <AlertCircle className="w-5 h-5 text-yellow-500" />
+                            <span className="text-sm font-medium text-yellow-500">
+                              Cukup Cocok
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <XCircle className="w-5 h-5 text-red-500" />
+                            <span className="text-sm font-medium text-red-500">
+                              Perlu Peningkatan
+                            </span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    <Separator />
+
+                    {/* Skill Gap */}
+                    {analysis.skillGap && (
+                      <div className="space-y-4">
+                        {/* Missing Skills */}
+                        {analysis.skillGap.missing && analysis.skillGap.missing.length > 0 && (
+                          <div>
+                            <div className="flex items-center gap-2 mb-2">
+                              <XCircle className="w-4 h-4 text-red-500" />
+                              <span className="text-sm font-semibold text-slate-900">
+                                Skills yang Kurang
+                              </span>
+                            </div>
+                            <div className="space-y-2">
+                              {analysis.skillGap.missing.map((skill, idx) => (
+                                <div
+                                  key={idx}
+                                  className="flex items-center justify-between p-2 bg-red-50 rounded-md"
                                 >
-                                  {skill.importance === "high"
-                                    ? "Penting"
-                                    : skill.importance === "medium"
-                                    ? "Sedang"
-                                    : "Rendah"}
+                                  <span className="text-sm text-slate-700">
+                                    {skill.skill}
+                                  </span>
+                                  <Badge
+                                    variant="outline"
+                                    className={`text-xs ${
+                                      skill.importance === "high"
+                                        ? "border-red-500 text-red-700"
+                                        : skill.importance === "medium"
+                                        ? "border-orange-500 text-orange-700"
+                                        : "border-yellow-500 text-yellow-700"
+                                    }`}
+                                  >
+                                    {skill.importance === "high"
+                                      ? "Penting"
+                                      : skill.importance === "medium"
+                                      ? "Sedang"
+                                      : "Rendah"}
+                                  </Badge>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Existing Skills */}
+                        {analysis.skillGap.existing && analysis.skillGap.existing.length > 0 && (
+                          <div>
+                            <div className="flex items-center gap-2 mb-2">
+                              <CheckCircle2 className="w-4 h-4 text-green-600" />
+                              <span className="text-sm font-semibold text-slate-900">
+                                Skills yang Sudah Ada
+                              </span>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              {analysis.skillGap.existing.map((skill, idx) => (
+                                <Badge
+                                  key={idx}
+                                  variant="outline"
+                                  className="text-xs border-green-500 text-green-700"
+                                >
+                                  {skill.skill}
                                 </Badge>
-                              </div>
-                            ))}
+                              ))}
+                            </div>
                           </div>
-                        </div>
-                      )}
-
-                      {/* Existing Skills */}
-                      {analysis.skillGap.existing && analysis.skillGap.existing.length > 0 && (
-                        <div>
-                          <div className="flex items-center gap-2 mb-2">
-                            <CheckCircle2 className="w-4 h-4 text-green-600" />
-                            <span className="text-sm font-semibold text-slate-900">
-                              Skills yang Sudah Ada
-                            </span>
-                          </div>
-                          <div className="flex flex-wrap gap-2">
-                            {analysis.skillGap.existing.map((skill, idx) => (
-                              <Badge
-                                key={idx}
-                                variant="outline"
-                                className="text-xs border-green-500 text-green-700"
-                              >
-                                {skill.skill}
-                              </Badge>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  <Separator />
-
-                  {/* AI Recommendation */}
-                  {analysis.recommendation && (
-                    <div>
-                      <div className="flex items-center gap-2 mb-4">
-                        <TrendingUp className="w-5 h-5 text-blue-600" />
-                        <span className="text-base font-semibold text-slate-900">
-                          Rekomendasi AI
-                        </span>
+                        )}
                       </div>
-                      <div 
-                        className="recommendation-content text-sm text-slate-700 leading-relaxed bg-blue-50 p-6 rounded-lg border border-blue-100"
-                        dangerouslySetInnerHTML={{ __html: analysis.recommendation }}
-                      />
+                    )}
+
+                    <Separator />
+
+                    {/* AI Recommendation */}
+                    {analysis.recommendation && (
+                      <div>
+                        <div className="flex items-center gap-2 mb-4">
+                          <TrendingUp className="w-5 h-5 text-blue-600" />
+                          <span className="text-base font-semibold text-slate-900">
+                            Rekomendasi AI
+                          </span>
+                        </div>
+                        <div 
+                          className="recommendation-content text-sm text-slate-700 leading-relaxed bg-blue-50 p-6 rounded-lg border border-blue-100"
+                          dangerouslySetInnerHTML={{ __html: analysis.recommendation }}
+                        />
+                      </div>
+                    )}
+
+                    <Separator />
+
+                    {/* Action Buttons */}
+                    <div className="space-y-3">
+                      <Button
+                        className="w-full"
+                        onClick={() => router.push("/profile")}
+                      >
+                        <Edit className="w-4 h-4 mr-2" />
+                        Update Profil
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className="w-full"
+                        onClick={() => setShowAnalysis(false)}
+                      >
+                        <ArrowRight className="w-4 h-4 mr-2" />
+                        Kembali ke Detail
+                      </Button>
                     </div>
-                  )}
-
-                  <Separator />
-
-                  {/* Action Buttons */}
-                  <div className="space-y-3">
-                    <Button
-                      className="w-full"
-                      onClick={() => router.push("/profile")}
-                    >
-                      <Edit className="w-4 h-4 mr-2" />
-                      Update Profil
-                    </Button>
-                    <Button
-                      variant="outline"
-                      className="w-full"
-                      onClick={() => setShowAnalysis(false)}
-                    >
-                      <ArrowRight className="w-4 h-4 mr-2" />
-                      Kembali ke Detail
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
+              </div>
             ) : (
               <>
                 {/* Apply Card - Hidden when analysis is showing */}
@@ -603,11 +913,153 @@ export default function JobDetailPage() {
                             <Button
                               variant="outline"
                               className="w-full"
-                              onClick={() => setShowAnalysis(true)}
+                              onClick={handleShowAnalysisPanel}
                             >
                               <TrendingUp className="w-4 h-4 mr-2" />
                               Lihat Hasil Analisis
                             </Button>
+                          )}
+                          <Button
+                            variant="secondary"
+                            className="w-full"
+                            onClick={handleGenerateQuest}
+                            disabled={questLoading}
+                          >
+                            {questLoading ? (
+                              <>
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                Menyiapkan simulasi...
+                              </>
+                              ) : (
+                                <>
+                                  <Sparkles className="w-4 h-4 mr-2" />
+                                  Mulai Simulasi Job (3 soal)
+                                </>
+                              )}
+                            </Button>
+                          {currentQuest && !shouldShowQuestOverlay && (
+                            <div ref={questRef} className="scroll-mt-24">
+                              <Card className={`border border-blue-100 bg-blue-50 transition-all duration-300 ${questHighlightClass}`}>
+                                <CardHeader>
+                                  <CardTitle className="text-base flex items-center justify-between">
+                                    <span>Simulasi Quest</span>
+                                    {progressLabel && (
+                                      <span className="text-xs font-medium text-blue-600 bg-blue-100 px-2 py-1 rounded-full">
+                                        {progressLabel}
+                                      </span>
+                                    )}
+                                  </CardTitle>
+                                </CardHeader>
+                                <CardContent className="space-y-4">
+                                  {hasQuestSubmission ? (
+                                    <>
+                                      <div className="rounded-lg border border-blue-200 bg-white/60 p-3 text-sm text-slate-800">
+                                        <p className="font-semibold text-slate-900">
+                                          Jawaban kamu sudah tersimpan.
+                                        </p>
+                                        <p className="text-slate-600">
+                                          Lanjutkan simulasi berikutnya atau tutup untuk kembali ke detail pekerjaan.
+                                        </p>
+                                        {isLastQuestionAnswered && (
+                                          <div className="mt-1 space-y-1">
+                                            <p className="text-sm font-semibold text-blue-700">
+                                              Sesi 3 soal selesai.
+                                            </p>
+                                            <p className="text-xs text-slate-600">
+                                              Tutup lalu klik "Mulai Simulasi Job (3 soal)" untuk memulai sesi baru.
+                                            </p>
+                                          </div>
+                                        )}
+                                      </div>
+                                      <div className="flex flex-col gap-2 sm:flex-row">
+                                        {isLastQuestionAnswered ? (
+                                          <Button
+                                            variant="outline"
+                                            className="w-full"
+                                            onClick={handleCloseQuestView}
+                                          >
+                                            Tutup
+                                          </Button>
+                                        ) : (
+                                          <>
+                                            <Button
+                                              variant="outline"
+                                              className="w-full sm:flex-1"
+                                              onClick={handleCloseQuestView}
+                                            >
+                                              Tutup
+                                            </Button>
+                                            <Button
+                                              className="w-full sm:flex-1"
+                                              onClick={handleNextQuest}
+                                            >
+                                              <Sparkles className="w-4 h-4 mr-2" />
+                                              Soal Berikutnya
+                                            </Button>
+                                          </>
+                                        )}
+                                      </div>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <p className="text-sm text-slate-700">{currentQuest.question}</p>
+                                      <div className="space-y-2">
+                                        {currentQuest.options.map((opt) => (
+                                          <label
+                                            key={opt.label}
+                                            className={`flex items-start gap-2 rounded-lg border p-3 cursor-pointer ${
+                                              selectedOption === opt.label
+                                                ? "border-blue-500 bg-white"
+                                                : "border-slate-200 bg-white"
+                                            }`}
+                                          >
+                                            <input
+                                              type="radio"
+                                              className="mt-1"
+                                              name="quest-option"
+                                              value={opt.label}
+                                              checked={selectedOption === opt.label}
+                                              onChange={() => setSelectedOption(opt.label)}
+                                            />
+                                            <div>
+                                              <p className="font-semibold text-slate-900">
+                                                {opt.label}. {opt.text.replace(/\[xp:\d+\]\s*/i, "")}
+                                              </p>
+                                            </div>
+                                          </label>
+                                        ))}
+                                      </div>
+                                      <div className="flex flex-col gap-2 sm:flex-row">
+                                        <Button
+                                          variant="outline"
+                                          className="w-full sm:flex-1"
+                                          onClick={handleCloseQuestView}
+                                        >
+                                          Tutup
+                                        </Button>
+                                        <Button
+                                          className="w-full sm:flex-1"
+                                          onClick={handleSubmitQuest}
+                                          disabled={!selectedOption || submitting}
+                                        >
+                                          {submitting ? (
+                                            <>
+                                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                              Mengirim jawaban...
+                                            </>
+                                          ) : (
+                                            "Submit Jawaban"
+                                          )}
+                                        </Button>
+                                      </div>
+                                    </>
+                                  )}
+                                  {questError && (
+                                    <p className="text-sm text-red-600">{questError}</p>
+                                  )}
+                                </CardContent>
+                              </Card>
+                            </div>
                           )}
                           <Separator />
                         </>
@@ -670,9 +1122,28 @@ export default function JobDetailPage() {
                     Apply Now
                   </Button>
 
-                  <Button variant="outline" className="w-full">
-                    <Bookmark className="w-4 h-4 mr-2" />
-                    Save Job
+                  <Button
+                    variant={isSaved ? "secondary" : "outline"}
+                    className="w-full"
+                    onClick={handleToggleSave}
+                    disabled={saving}
+                  >
+                    {saving ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Menyimpan...
+                      </>
+                    ) : isSaved ? (
+                      <>
+                        <BookmarkCheck className="w-4 h-4 mr-2" />
+                        Tersimpan (klik untuk hapus)
+                      </>
+                    ) : (
+                      <>
+                        <Bookmark className="w-4 h-4 mr-2" />
+                        Save Job
+                      </>
+                    )}
                   </Button>
                 </div>
               </CardContent>
@@ -755,8 +1226,174 @@ export default function JobDetailPage() {
           </div>
         </div>
       </div>
+      {shouldShowQuestOverlay && currentQuest && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/60 backdrop-blur-sm px-4 py-10">
+          <div
+            className="w-full max-w-3xl origin-top animate-fade-in-up"
+            role="dialog"
+            aria-modal="true"
+          >
+            <Card
+              ref={questRef}
+              className={`shadow-2xl transition-all duration-300 ${questHighlightClass}`}
+            >
+              <CardHeader className="flex flex-row items-start justify-between gap-4">
+                <div className="space-y-1">
+                  <p className="text-xs uppercase tracking-[0.2em] text-blue-500">Simulasi Quest</p>
+                  <CardTitle className="text-xl leading-tight text-slate-900">{currentQuest.question}</CardTitle>
+                  {progressLabel && (
+                    <p className="text-xs font-medium text-blue-700">{progressLabel}</p>
+                  )}
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-9 w-9"
+                  onClick={handleCloseQuestView}
+                  aria-label="Tutup simulasi"
+                >
+                  <XCircle className="h-5 w-5" />
+                </Button>
+              </CardHeader>
+              <CardContent className="space-y-5 pb-6">
+                {!hasQuestSubmission && (
+                  <div className="space-y-3">
+                    {currentQuest.options.map((opt) => (
+                      <label
+                        key={opt.label}
+                        className={`flex items-start gap-3 rounded-xl border p-4 shadow-sm transition ${
+                          selectedOption === opt.label
+                            ? "border-blue-500 bg-blue-50"
+                            : "border-slate-200 bg-white hover:border-blue-200"
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          className="mt-1"
+                          name="quest-option"
+                          value={opt.label}
+                          checked={selectedOption === opt.label}
+                          onChange={() => setSelectedOption(opt.label)}
+                        />
+                        <div>
+                          <p className="font-semibold text-slate-900">
+                            {opt.label}. {opt.text.replace(/\[xp:\d+\]\s*/i, "")}
+                          </p>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                )}
+
+                {hasQuestSubmission && (
+                  <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-slate-800 shadow-sm">
+                    <p className="mb-1 font-semibold text-slate-900">
+                      Jawaban kamu sudah tersimpan.
+                    </p>
+                    <p className="text-sm text-slate-600">
+                      Lanjutkan simulasi berikutnya atau tutup untuk kembali ke detail pekerjaan.
+                    </p>
+                    {isLastQuestionAnswered && (
+                      <div className="mt-1 space-y-1">
+                        <p className="text-sm font-semibold text-blue-700">
+                          Sesi 3 soal selesai.
+                        </p>
+                        <p className="text-xs text-slate-600">
+                          Tutup lalu klik "Mulai Simulasi Job (3 soal)" untuk memulai sesi baru.
+                        </p>
+                      </div>
+                    )}
+                    {submitResult.selectedOption && currentQuest && (
+                      <p className="mt-2 text-sm text-slate-700">
+                        Jawaban terakhir:{" "}
+                        <span className="font-semibold text-slate-900">
+                          {submitResult.selectedOption.toUpperCase()}.
+                        </span>{" "}
+                        {currentQuest.options
+                          .find((opt) => opt.label === submitResult.selectedOption)
+                          ?.text.replace(/\[xp:\d+\]\s*/i, "")}
+                      </p>
+                    )}
+                    {submitResult.aiFeedback && (
+                      <p className="mt-3 text-sm text-slate-800">
+                        <span className="font-semibold text-blue-700">Feedback AI: </span>
+                        {submitResult.aiFeedback}
+                      </p>
+                    )}
+                    {submitResult.correctOption && (
+                      <p className="mt-2 text-xs text-slate-500">
+                        Jawaban yang Tepat: {submitResult.correctOption.toUpperCase()}
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {questError && <p className="text-sm text-red-600">{questError}</p>}
+
+                <div className="flex flex-col gap-3 sm:flex-row">
+                  {hasQuestSubmission ? (
+                    <>
+                      {isLastQuestionAnswered ? (
+                        <Button
+                          variant="outline"
+                          className="w-full"
+                          onClick={handleCloseQuestView}
+                        >
+                          Tutup
+                        </Button>
+                      ) : (
+                        <>
+                          <Button
+                            variant="outline"
+                            className="w-full sm:flex-1"
+                            onClick={handleCloseQuestView}
+                          >
+                            Tutup
+                          </Button>
+                          <Button
+                            className="w-full sm:flex-1"
+                            onClick={handleNextQuest}
+                          >
+                            <>
+                              <Sparkles className="w-4 h-4 mr-2" />
+                              Soal Berikutnya
+                            </>
+                          </Button>
+                        </>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <Button
+                        variant="outline"
+                        className="w-full sm:flex-1"
+                        onClick={handleCloseQuestView}
+                      >
+                        Tutup
+                      </Button>
+                      <Button
+                        className="w-full sm:flex-1"
+                        onClick={handleSubmitQuest}
+                        disabled={!selectedOption || submitting}
+                      >
+                        {submitting ? (
+                          <>
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            Mengirim jawaban...
+                          </>
+                        ) : (
+                          "Submit Jawaban"
+                        )}
+                      </Button>
+                    </>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      )}
       <Footer />
     </div>
   );
 }
-

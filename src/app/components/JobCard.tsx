@@ -1,11 +1,13 @@
 "use client";
 
 import { useRouter } from 'next/navigation';
+import { useState } from 'react';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
-import { MapPin, Clock, DollarSign, Bookmark, Send, Sparkles } from 'lucide-react';
+import { MapPin, Clock, DollarSign, Bookmark, BookmarkCheck, Send, Loader2 } from 'lucide-react';
+import { toast } from "sonner";
 
 interface Job {
   id: string;
@@ -18,14 +20,18 @@ interface Job {
   posted: string;
   salary: string;
   url?: string;
+  isSaved?: boolean;
 }
 
 interface JobCardProps {
   job: Job;
+  onToggleSave?: (saved: boolean) => void;
 }
 
-export function JobCard({ job }: JobCardProps) {
+export function JobCard({ job, onToggleSave }: JobCardProps) {
   const router = useRouter();
+  const [saving, setSaving] = useState(false);
+  const [isSaved, setIsSaved] = useState<boolean>(Boolean(job.isSaved));
 
   const handleViewDetails = () => {
     if (job.url) {
@@ -54,8 +60,39 @@ export function JobCard({ job }: JobCardProps) {
               </h3>
               <p className="text-slate-600">{job.company}</p>
             </div>
-            <Button variant="ghost" size="icon" className="shrink-0">
-              <Bookmark className="w-5 h-5" />
+            <Button
+              variant={isSaved ? "secondary" : "ghost"}
+              size="icon"
+              className="shrink-0"
+              disabled={saving}
+              onClick={async () => {
+                if (!job.id) return;
+                try {
+                  setSaving(true);
+                  const res = await fetch(`/api/jobs/${job.id}/save`, { method: "POST" });
+                  if (!res.ok) {
+                    const err = await res.json().catch(() => ({}));
+                    throw new Error(err.error || "Gagal menyimpan");
+                  }
+                  const data = await res.json();
+                  setIsSaved(Boolean(data.saved));
+                  onToggleSave?.(Boolean(data.saved));
+                  toast.success(Boolean(data.saved) ? "Job disimpan" : "Simpanan dihapus");
+                } catch (error) {
+                  console.error("Error toggling save:", error);
+                  toast.error("Gagal menyimpan pekerjaan");
+                } finally {
+                  setSaving(false);
+                }
+              }}
+            >
+              {saving ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : isSaved ? (
+                <BookmarkCheck className="w-5 h-5" />
+              ) : (
+                <Bookmark className="w-5 h-5" />
+              )}
             </Button>
           </div>
 
