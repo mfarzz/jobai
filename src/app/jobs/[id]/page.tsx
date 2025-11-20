@@ -645,9 +645,6 @@ export default function JobDetailPage() {
                           Kami sedang menganalisis skills, pengalaman, pendidikan, sertifikasi, dan proyek Anda untuk menentukan kecocokan dengan posisi ini.
                         </p>
                         <div className="mt-3 space-y-2">
-                          <div className="mx-auto h-2 w-48 rounded-full bg-slate-200 overflow-hidden">
-                            <div className="h-full w-1/2 bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 animate-pulse" />
-                          </div>
                           <p className="text-xs text-blue-600 font-medium">AI sedang bekerja untukmu</p>
                         </div>
                       </div>
