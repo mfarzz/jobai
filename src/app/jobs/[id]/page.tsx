@@ -966,7 +966,7 @@ export default function JobDetailPage() {
                                               Sesi 3 soal selesai.
                                             </p>
                                             <p className="text-xs text-slate-600">
-                                              Tutup lalu klik "Mulai Simulasi Job (3 soal)" untuk memulai sesi baru.
+                                              Tutup lalu klik &quot;Mulai Simulasi Job (3 soal)&quot; untuk memulai sesi baru.
                                             </p>
                                           </div>
                                         )}
@@ -1117,7 +1117,16 @@ export default function JobDetailPage() {
                     )}
                   </div>
 
-                  <Button className="w-full" size="lg">
+                  <Button 
+                    className="w-full" 
+                    size="lg"
+                    onClick={() => {
+                      if (job.companyInfo?.website) {
+                        window.open(job.companyInfo.website, '_blank', 'noopener,noreferrer');
+                      }
+                    }}
+                    disabled={!job.companyInfo?.website}
+                  >
                     <Send className="w-4 h-4 mr-2" />
                     Apply Now
                   </Button>
@@ -1227,9 +1236,9 @@ export default function JobDetailPage() {
         </div>
       </div>
       {shouldShowQuestOverlay && currentQuest && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/60 backdrop-blur-sm px-4 py-10">
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-900/60 backdrop-blur-sm px-4 py-10">
           <div
-            className="w-full max-w-3xl origin-top animate-fade-in-up"
+            className="w-full max-w-3xl animate-fade-in-up"
             role="dialog"
             aria-modal="true"
           >
@@ -1299,7 +1308,7 @@ export default function JobDetailPage() {
                           Sesi 3 soal selesai.
                         </p>
                         <p className="text-xs text-slate-600">
-                          Tutup lalu klik "Mulai Simulasi Job (3 soal)" untuk memulai sesi baru.
+                          Tutup lalu klik &quot;Mulai Simulasi Job (3 soal)&quot; untuk memulai sesi baru.
                         </p>
                       </div>
                     )}

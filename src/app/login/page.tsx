@@ -6,7 +6,8 @@ import { signIn, useSession } from "next-auth/react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Briefcase, Mail, Lock, Eye, EyeOff } from "lucide-react";
+import { Mail, Lock, Eye, EyeOff } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
 import { TopNav } from "../components/TopNav";
 import { Footer } from "../components/Footer";
@@ -108,13 +109,17 @@ export default function LoginPage() {
       <div className="flex items-center justify-center flex-1 py-8 px-4 pt-24">
         <Card className="w-full max-w-md shadow-lg border-slate-200 bg-white">
           <CardHeader className="space-y-1 text-center">
-            <div className="flex justify-center mb-4">
-              <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg flex items-center justify-center">
-                <Briefcase className="w-7 h-7 text-white" />
-              </div>
+            <div className="flex justify-center">
+              <Image 
+                src="/logoapp.png" 
+                alt="CareerPlay" 
+                width={120}
+                height={120} 
+                className="object-contain"
+              />
             </div>
             <CardTitle className="text-2xl font-semibold text-slate-900">
-              Masuk ke JobAI
+              Masuk ke CareerPlay
             </CardTitle>
             <CardDescription className="text-slate-600">
               Masuk untuk melanjutkan ke akun Anda

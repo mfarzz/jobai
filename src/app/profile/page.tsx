@@ -1423,7 +1423,7 @@ export default function ProfilePage() {
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <div>
-                    <CardTitle>Impor CV</CardTitle>
+                    <CardTitle>Import CV</CardTitle>
                     <CardDescription>
                       Upload CV (PDF/DOCX/TXT). File tidak disimpan; hanya diekstrak.
                     </CardDescription>
@@ -1433,7 +1433,7 @@ export default function ProfilePage() {
                     onClick={() => fileInputRef.current?.click()}
                   >
                     <FileText className="w-4 h-4 mr-2" />
-                    Pilih File
+                    Choose File
                   </Button>
                   <input
                     ref={fileInputRef}
@@ -2548,42 +2548,6 @@ export default function ProfilePage() {
               </CardContent>
             </Card>
             )}
-          </TabsContent>
-
-          {/* CV Tab */}
-          <TabsContent value="cv">
-            <Card>
-              <CardHeader>
-                <CardTitle>CV & Documents</CardTitle>
-                <CardDescription>Upload your CV and other documents</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="border-2 border-dashed border-slate-300 rounded-lg p-8 text-center">
-                  <FileText className="w-12 h-12 text-slate-400 mx-auto mb-4" />
-                  <p className="text-slate-600 mb-2">No CV uploaded</p>
-                  <p className="text-sm text-slate-500 mb-4">
-                    Upload your CV to help employers find you
-                  </p>
-                  <Button>
-                    <Plus className="w-4 h-4 mr-2" />
-                    Upload CV
-                  </Button>
-                </div>
-
-                <Separator />
-
-                <div className="space-y-2">
-                  <h4 className="font-medium">Other Documents</h4>
-                  <p className="text-sm text-slate-500">
-                    You can upload portfolio, certificates, and other supporting documents.
-                  </p>
-                  <Button variant="outline" className="w-full">
-                    <Plus className="w-4 h-4 mr-2" />
-                    Add Document
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
           </TabsContent>
         </Tabs>
       </div>

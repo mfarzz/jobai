@@ -221,6 +221,7 @@ export async function GET(request: NextRequest) {
       posted: formatTimeAgo(job.activationDate || job.createdAt),
       salary: "Not specified", // Can be enhanced later
       url: `/jobs/${job.id}`,
+      companyWebsite: job.company?.website || null,
       isHybrid: job.isHybrid || false,
       isWfh: job.isWfh || false,
       skills: job.jobSkills.map((skill) => skill.skillName),

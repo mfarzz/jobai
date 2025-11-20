@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "JobAI - Temukan Pekerjaan Impian Anda",
+  title: "CareerPlay - Unlock Your Potential",
   description: "Platform pencarian pekerjaan dengan AI",
 };
 

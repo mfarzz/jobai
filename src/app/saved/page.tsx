@@ -82,9 +82,6 @@ export default function SavedJobsPage() {
               Simpan pekerjaan impian kamu.
             </p>
           </div>
-          <Button variant="outline" onClick={() => router.push("/")}>
-            Cari Pekerjaan
-          </Button>
         </div>
 
         {loading && (

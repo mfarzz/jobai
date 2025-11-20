@@ -4,7 +4,8 @@ import { useSession, signOut } from "next-auth/react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
-import { Search, Home, Briefcase, Bookmark, User, LogOut, Settings, Menu, LogIn, X } from 'lucide-react';
+import Image from "next/image"
+import { Search, Home, Briefcase, Bookmark, User, LogOut, Menu, LogIn, X } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import {
@@ -146,10 +147,13 @@ export function TopNav() {
           {/* Logo */}
               <div className="flex items-center gap-4 md:gap-8">
             <Link href="/" className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg flex items-center justify-center">
-                <Briefcase className="w-5 h-5 text-white" />
-              </div>
-              <span className="font-semibold text-slate-900">JobAI</span>
+                <Image 
+                  src="/logoapp.png" 
+                  alt="CareerPlay" 
+                  width={80}
+                  height={80} 
+                  className="object-contain"
+                />
             </Link>
 
                 {/* Search Bar - Desktop */}
@@ -219,10 +223,6 @@ export function TopNav() {
                     <User className="mr-2 h-4 w-4" />
                     <span>Profile</span>
                   </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => router.push("/settings")}>
-                        <Settings className="mr-2 h-4 w-4" />
-                        <span>Settings</span>
-                      </DropdownMenuItem>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem 
                         onClick={handleLogout}
@@ -340,17 +340,6 @@ export function TopNav() {
                             >
                               <User className="w-5 h-5" />
                               <span>Profile</span>
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              className="w-full justify-start gap-3"
-                              onClick={() => {
-                                router.push("/settings");
-                                setMobileMenuOpen(false);
-                              }}
-                            >
-                              <Settings className="w-5 h-5" />
-                              <span>Settings</span>
                             </Button>
                             <Separator />
                             <Button

@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { JobCard } from './JobCard';
 import { Skeleton } from './ui/skeleton';
+import { Loader2 } from 'lucide-react';
 
 interface Job {
   id: string;
@@ -235,12 +236,14 @@ export function JobFeed() {
           {/* Load More Trigger */}
           <div ref={loadMoreRef} className="py-4">
             {isLoadingMore && (
-              <div className="space-y-4">
-                <SkeletonCard />
-                <SkeletonCard />
+              <div className="flex items-center justify-center py-8">
+                <div className="flex flex-col items-center gap-3">
+                  <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+                  <p className="text-sm text-slate-600">Memuat lowongan...</p>
+                </div>
               </div>
             )}
-            {!hasMore && jobs.length > 0 && (
+            {!hasMore && jobs.length > 0 && !isLoadingMore && (
               <p className="text-center text-slate-500 py-4">
                 Tidak ada lowongan lagi
               </p>

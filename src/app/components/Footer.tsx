@@ -44,9 +44,8 @@ export function Footer() {
 
         <Separator className="my-6" />
 
-        <div className="flex flex-col md:flex-row items-center justify-between gap-4 text-slate-600">
-          <p>© 2025 JobAI. All rights reserved.</p>
-          <p>Powered by AI • Made with ❤️ in Indonesia</p>
+        <div className="flex flex-col md:flex-row items-center justify-center gap-4 text-slate-600">
+          <p>© 2025 CareerPlay. All rights reserved.</p>
         </div>
       </div>
     </footer>

@@ -20,6 +20,7 @@ interface Job {
   posted: string;
   salary: string;
   url?: string;
+  companyWebsite?: string;
   isSaved?: boolean;
 }
 
@@ -126,10 +127,13 @@ export function JobCard({ job, onToggleSave }: JobCardProps) {
                 size="sm" 
                 className="gap-1"
                 onClick={() => {
-                  if (job.url && job.url !== '#') {
+                  if (job.companyWebsite) {
+                    window.open(job.companyWebsite, '_blank', 'noopener,noreferrer');
+                  } else if (job.url && job.url !== '#') {
                     router.push(job.url);
                   }
                 }}
+                disabled={!job.companyWebsite && (!job.url || job.url === '#')}
               >
                 <Send className="w-4 h-4" />
                 Apply Now

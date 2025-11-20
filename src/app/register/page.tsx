@@ -6,8 +6,9 @@ import { signIn, useSession } from "next-auth/react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Briefcase, Mail, Lock, User, Eye, EyeOff } from "lucide-react";
+import { Mail, Lock, User, Eye, EyeOff } from "lucide-react";
 import Link from "next/link";
+import Image from "next/image";
 import { TopNav } from "../components/TopNav";
 import { Footer } from "../components/Footer";
 
@@ -102,7 +103,7 @@ export default function RegisterPage() {
         router.push("/");
         router.refresh();
       }
-    } catch (error) {
+    } catch {
       setError("Terjadi kesalahan saat registrasi");
       setIsLoading(false);
     }
@@ -113,7 +114,7 @@ export default function RegisterPage() {
     setError(null);
     try {
       await signIn("google", { callbackUrl: "/" });
-    } catch (error) {
+    } catch {
       setError("Terjadi kesalahan saat login dengan Google");
       setIsLoading(false);
     }
@@ -139,13 +140,17 @@ export default function RegisterPage() {
       <div className="flex items-center justify-center flex-1 py-8 px-4 pt-24">
         <Card className="w-full max-w-md shadow-lg border-slate-200 bg-white">
           <CardHeader className="space-y-1 text-center">
-            <div className="flex justify-center mb-4">
-              <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg flex items-center justify-center">
-                <Briefcase className="w-7 h-7 text-white" />
-              </div>
+            <div className="flex justify-center">
+              <Image 
+                src="/logoapp.png" 
+                alt="CareerPlay Logo" 
+                width={120}
+                height={120} 
+                className="object-contain"
+              />
             </div>
             <CardTitle className="text-2xl font-semibold text-slate-900">
-              Daftar ke JobAI
+              Daftar ke CareerPlay
             </CardTitle>
             <CardDescription className="text-slate-600">
               Buat akun baru untuk mulai mencari pekerjaan impian Anda
