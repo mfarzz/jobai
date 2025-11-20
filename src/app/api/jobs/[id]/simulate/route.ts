@@ -84,7 +84,7 @@ async function generateQuest({
   const options = Array.isArray(parsed.options) ? parsed.options : [];
   const validOptions = options
     .filter(
-      (o) =>
+      (o: { label: string; text: string; xp: number }) =>
         ["A", "B", "C"].includes(o.label) &&
         typeof o.text === "string" &&
         typeof o.xp === "number"
@@ -96,7 +96,7 @@ async function generateQuest({
   }
 
   const explanations: Record<string, string> = {};
-  validOptions.forEach((opt) => {
+  validOptions.forEach((opt: { label: string; text: string; xp: number; explanation?: string }) => {
     if (opt.explanation && typeof opt.explanation === "string") {
       explanations[opt.label] = opt.explanation;
     }
@@ -139,7 +139,7 @@ export async function GET(
 ) {
   try {
     const params =
-      "params" in ctx && typeof (ctx as any).params?.then === "function"
+      "params" in ctx && typeof (ctx as { params: Promise<{ id: string }> }).params?.then === "function"
         ? await (ctx as { params: Promise<{ id: string }> }).params
         : (ctx as { params: { id: string } }).params;
 
@@ -229,7 +229,7 @@ export async function POST(
 ) {
   try {
     const params =
-      "params" in ctx && typeof (ctx as any).params?.then === "function"
+      "params" in ctx && typeof (ctx as { params: Promise<{ id: string }> }).params?.then === "function"
         ? await (ctx as { params: Promise<{ id: string }> }).params
         : (ctx as { params: { id: string } }).params;
 

@@ -186,7 +186,7 @@ export async function POST(request: NextRequest) {
     // Experiences
     const expPayload = cleanedExperiences.map((exp) => ({
       userId,
-      title: exp.title,
+      title: exp.title ?? "",
       company: exp.company ?? "Unknown",
       location: exp.location ?? null,
       startDate: parseDate(exp.startDate) ?? new Date(),
@@ -201,7 +201,7 @@ export async function POST(request: NextRequest) {
     // Projects
     const projectPayload = cleanedProjects.map((proj) => ({
       userId,
-      name: proj.name,
+      name: proj.name ?? "",
       description: proj.description ?? null,
       startDate: parseDate(proj.startDate),
       endDate: parseDate(proj.endDate),
@@ -214,7 +214,7 @@ export async function POST(request: NextRequest) {
     // Education
     const educationPayload = cleanedEducation.map((edu) => ({
       userId,
-      school: edu.school,
+      school: edu.school ?? "",
       degree: edu.degree ?? null,
       field: edu.field ?? null,
       startDate: parseDate(edu.startDate),
@@ -229,7 +229,7 @@ export async function POST(request: NextRequest) {
     // Certifications
     const certPayload = cleanedCertifications.map((cert) => ({
       userId,
-      name: cert.name,
+      name: cert.name ?? "",
       issuer: cert.issuer ?? "Unknown",
       issueDate: parseDate(cert.issueDate) ?? new Date(),
       expiryDate: parseDate(cert.expiryDate),
