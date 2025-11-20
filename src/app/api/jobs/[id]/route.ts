@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 
 function formatTimeAgo(date: Date | null): string {
   if (!date) return "Unknown";
@@ -20,7 +22,10 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = await params;
+    const [session, { id }] = await Promise.all([
+      getServerSession(authOptions),
+      params,
+    ]);
     const jobId = parseInt(id);
 
     if (isNaN(jobId)) {
@@ -30,13 +35,20 @@ export async function GET(
       );
     }
 
-    const job = await prisma.job.findUnique({
-      where: { id: jobId },
-      include: {
-        company: true,
-        jobSkills: true,
-      },
-    });
+    const [job, saved] = await Promise.all([
+      prisma.job.findUnique({
+        where: { id: jobId },
+        include: {
+          company: true,
+          jobSkills: true,
+        },
+      }),
+      session?.user?.id
+        ? prisma.savedJob.findUnique({
+            where: { userId_jobId: { userId: session.user.id, jobId } },
+          })
+        : null,
+    ]);
 
     if (!job) {
       return NextResponse.json(
@@ -86,7 +98,11 @@ export async function GET(
       kalibrrJobId: job.kalibrrJobId,
     };
 
-    return NextResponse.json(transformedJob);
+    return NextResponse.json({
+      ...transformedJob,
+      isSaved: Boolean(saved),
+    });
+
   } catch (error) {
     console.error("Error fetching job:", error);
     return NextResponse.json(

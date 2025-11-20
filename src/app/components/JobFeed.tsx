@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { JobCard } from './JobCard';
-import { Loader2 } from 'lucide-react';
+import { Skeleton } from './ui/skeleton';
 
 interface Job {
   id: string;
@@ -20,6 +20,7 @@ interface Job {
   isHybrid?: boolean;
   isWfh?: boolean;
   skills?: string[];
+  isSaved?: boolean;
 }
 
 export function JobFeed() {
@@ -132,10 +133,42 @@ export function JobFeed() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasMore, isLoadingMore, offset, searchQuery, type, categoriesKey, citiesKey, remote]);
 
+  const SkeletonCard = () => (
+    <div className="p-5 rounded-xl border bg-white shadow-sm space-y-4">
+      <div className="flex items-start gap-4">
+        <Skeleton className="h-12 w-12 rounded-lg" />
+        <div className="flex-1 space-y-2">
+          <Skeleton className="h-5 w-48" />
+          <Skeleton className="h-4 w-32" />
+          <div className="flex items-center gap-3">
+            <Skeleton className="h-4 w-24" />
+            <Skeleton className="h-4 w-20" />
+          </div>
+        </div>
+        <Skeleton className="h-9 w-9 rounded-md" />
+      </div>
+      <div className="space-y-2">
+        <Skeleton className="h-3.5 w-full" />
+        <Skeleton className="h-3.5 w-5/6" />
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <Skeleton className="h-5 w-28" />
+        <Skeleton className="h-5 w-20" />
+        <Skeleton className="h-5 w-24" />
+      </div>
+      <div className="flex items-center gap-2 justify-end">
+        <Skeleton className="h-9 w-28" />
+        <Skeleton className="h-9 w-32" />
+      </div>
+    </div>
+  );
+
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+      <div className="space-y-4">
+        {Array.from({ length: 4 }).map((_, idx) => (
+          <SkeletonCard key={idx} />
+        ))}
       </div>
     );
   }
@@ -186,14 +219,25 @@ export function JobFeed() {
       {jobs.length > 0 ? (
         <>
           {jobs.map((job) => (
-            <JobCard key={job.id} job={job} />
+            <JobCard
+              key={job.id}
+              job={job}
+              onToggleSave={(saved) => {
+                setJobs((prev) =>
+                  prev.map((j) =>
+                    j.id === job.id ? { ...j, isSaved: saved } : j
+                  )
+                );
+              }}
+            />
           ))}
           
           {/* Load More Trigger */}
           <div ref={loadMoreRef} className="py-4">
             {isLoadingMore && (
-              <div className="flex items-center justify-center py-4">
-                <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
+              <div className="space-y-4">
+                <SkeletonCard />
+                <SkeletonCard />
               </div>
             )}
             {!hasMore && jobs.length > 0 && (

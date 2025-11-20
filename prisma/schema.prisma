@@ -33,6 +33,7 @@ model User {
   roadmaps          Roadmap[]
   arenaParticipants ArenaParticipant[]
   userBadges        UserBadge[]
+  savedJobs         SavedJob[]
 
   @@map("users")
 }
@@ -160,6 +161,7 @@ model Job {
   careerAnalyses        CareerAnalysis[]
   quests                Quest[]
   roadmaps              Roadmap[]
+  savedBy               SavedJob[]
 
   @@map("jobs")
 }
@@ -300,6 +302,9 @@ model Quest {
   optionA       String?  @map("option_a") @db.Text
   optionB       String?  @map("option_b") @db.Text
   optionC       String?  @map("option_c") @db.Text
+  explanationA  String?  @map("explanation_a") @db.Text
+  explanationB  String?  @map("explanation_b") @db.Text
+  explanationC  String?  @map("explanation_c") @db.Text
   correctOption String?  @map("correct_option") @db.Char(1)
   xpReward      Int?     @map("xp_reward")
   difficulty    String?  @db.VarChar(30)
@@ -318,13 +323,33 @@ model UserQuest {
   questId     String    @map("quest_id") @db.Uuid
   status      String?   @db.VarChar(30)
   score       Int?
+  selectedOption String? @map("selected_option") @db.Char(1)
   xpEarned    Int?      @map("xp_earned")
+  aiFeedback  String?   @map("ai_feedback") @db.Text
   completedAt DateTime? @map("completed_at") @db.Timestamp
 
   user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
   quest Quest @relation(fields: [questId], references: [id], onDelete: Cascade)
 
   @@map("user_quests")
+}
+
+////////////////////////////////////////////////////
+// SAVED JOBS (Bookmark)
+////////////////////////////////////////////////////
+
+model SavedJob {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  jobId     Int      @map("job_id")
+  note      String?  @db.Text
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  job  Job  @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, jobId])
+  @@map("saved_jobs")
 }
 
 ////////////////////////////////////////////////////

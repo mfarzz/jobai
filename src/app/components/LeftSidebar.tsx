@@ -49,7 +49,7 @@ export function LeftSidebar() {
     return (
       <div className="space-y-4 sticky top-20">
         <Card className="overflow-hidden">
-          <div className="h-16 bg-gradient-to-r from-blue-500 to-blue-600" />
+          <div className="h-16 bg-white" />
           <div className="px-4 pb-4">
             <div className="flex flex-col items-center -mt-8">
               <div className="w-16 h-16 border-4 border-white rounded-full bg-slate-100 flex items-center justify-center">
@@ -80,7 +80,7 @@ export function LeftSidebar() {
     <div className="space-y-4 sticky top-20">
       {/* Profile Card */}
       <Card className="overflow-hidden">
-        <div className="h-16 bg-gradient-to-r from-blue-500 to-blue-600" />
+        <div className="h-16 bg-white" />
         <div className="px-4 pb-4">
           <div className="flex flex-col items-center -mt-8">
             <Avatar className="w-16 h-16 border-4 border-white">
